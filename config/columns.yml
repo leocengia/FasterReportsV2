@@ -1,0 +1,268 @@
+# ============================================================================
+# CONTRATTO COLONNE — sorgente di verita' della mappatura CSV -> workbook.
+#
+# PROVENIENZA: verificato il 2026-07-31 contro "Omni Report W30.xlsm" leggendo
+#   (a) le intestazioni reali di riga 1 dei 4 fogli DATASET,
+#   (b) tutte le formule del workbook (quali colonne dataset sono consumate),
+#   (c) il codice VBA del modulo CreaMalpractice (decompresso).
+# Rigenerabile con:  python tools/audit_workbook.py "samples/Omni Report W30.xlsm"
+#
+# NON allineare a "Definizioni KPI": e' obsoleto (piano §0).
+#
+# `role`:
+#   input   -> valore preso dal CSV e scritto in `target_col`
+#   derived -> calcolato dalle formule del template; la pipeline NON lo scrive
+# `match`:
+#   exact_first (default) -> nome esatto, poi nome normalizzato, poi alias
+#   exact       -> SOLO nome esatto. Da usare quando esiste nel sorgente una
+#                  colonna diversa che collassa sullo stesso nome normalizzato:
+#                  meglio fallire che legare la formula alla colonna sbagliata.
+# `consumers`: chi legge la colonna nel workbook. Serve al test di
+#   auto-verifica del contratto: se una formula nuova consuma una colonna che
+#   qui non c'e', il test lo segnala.
+# ============================================================================
+
+normalize:
+  lower: true
+  strip: true
+  collapse_spaces: true
+  underscore_eq_space: true
+  strip_punct: ["(", ")", "%", "–", "-", "/", "|", ".", ",", ":"]
+
+datasets:
+
+  # --------------------------------------------------------------------------
+  # AT_DATASET — Agent Timeline. ~130k righe.
+  # Colonna A = indice di riga (valori 1..N, decorativo: nessuna formula ne'
+  # il VBA la leggono). Dati veri da B. P/Q sono formule del template,
+  # pre-riempite fino a riga 130000.
+  # --------------------------------------------------------------------------
+  AT_DATASET:
+    sheet: AT_DATASET
+    header_row: 1
+    data_start_col: B
+    data_end_col: N          # oltre N ci sono O (libera) e P/Q derivate
+    max_template_row: 130000 # fin dove arrivano le formule P/Q nel template
+    fields:
+      - canonical: "Agent Email"
+        target_col: B
+        role: input
+        dtype: str
+        aliases: ["agent_email", "Agent E-mail"]
+        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules"]
+        notes: "Chiave agente. Il VBA usa questa colonna per trovare l'ultima riga (End(xlUp) su B)."
+      - canonical: "Agent State"
+        target_col: F
+        role: input
+        dtype: str
+        aliases: ["agent_state", "State"]
+        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules"]
+        notes: "Valori usati: Break, Available Cases, Login, Offline."
+      - canonical: "Number of Active Contacts"
+        target_col: H
+        role: input
+        dtype: float
+        aliases: ["number_of_active_contacts", "Active Contacts"]
+        consumers: ["Verifica AHT"]
+        notes: "ASSENTE dal piano §4 — trovata scansionando le formule di 'Verifica AHT'."
+      - canonical: "Start Time"
+        target_col: I
+        role: input
+        dtype: datetime
+        aliases: ["start_time", "Interval Start"]
+        consumers: ["AT_DATASET!P", "AT_DATASET!Q"]
+        notes: "Sorgente di P e Q. Nessuna formula esterna la legge direttamente."
+      - canonical: "Total Time in seconds"
+        target_col: K
+        role: input
+        dtype: float
+        aliases: ["total_time_seconds", "Total Time (s)", "total_time_in_seconds"]
+        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules"]
+      - canonical: "Productive Aux Flag (Yes / No)"
+        target_col: L
+        role: input
+        dtype: str
+        aliases: ["productive_aux_flag", "Productive Aux", "Productive Aux Flag"]
+        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT"]
+        notes: "Valori Yes/No."
+      - canonical: "Data Milano"
+        target_col: P
+        role: derived
+        source: "Start Time"
+        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules"]
+        formula: '=IF($I2="","",INT($I2+''Helper Malpractice''!$B$7/24))'
+      - canonical: "Ora Milano"
+        target_col: Q
+        role: derived
+        source: "Start Time"
+        consumers: ["VBA:AddATRules"]
+        formula: '=IF($I2="","",($I2+''Helper Malpractice''!$B$7/24)-INT($I2+''Helper Malpractice''!$B$7/24))'
+    # Offset fuso Seattle->Milano, in ore. Vive nel workbook: la pipeline lo
+    # legge da qui e non lo duplica in settings.yml.
+    derive_offset_from: "'Helper Malpractice'!B7"
+
+  # --------------------------------------------------------------------------
+  # ATwi_DATASET — Agent Timeline / workitem. ~15k righe.
+  # Colonna A = indice di riga (decorativo). Dati da B.
+  # --------------------------------------------------------------------------
+  ATwi_DATASET:
+    sheet: ATwi_DATASET
+    header_row: 1
+    data_start_col: B
+    data_end_col: P
+    fields:
+      - canonical: "Agent Email"
+        target_col: C
+        role: input
+        dtype: str
+        aliases: ["agent_email", "Agent E-mail"]
+        consumers: ["Outbound Exploitation", "Verifica AHT"]
+      - canonical: "Talk Time in seconds"
+        target_col: H
+        role: input
+        dtype: float
+        aliases: ["talk_time_seconds", "talk_time_in_seconds"]
+        consumers: ["Outbound Exploitation"]
+      - canonical: "Wrap-up Time in seconds"
+        target_col: I
+        role: input
+        dtype: float
+        aliases: ["wrap_up_time_seconds", "ACW seconds", "wrap_up_time_in_seconds", "Wrap up Time in seconds"]
+        consumers: ["Outbound Exploitation"]
+      - canonical: "Handle Time in seconds"
+        target_col: J
+        role: input
+        dtype: float
+        aliases: ["handle_time_seconds", "handle_time_in_seconds"]
+        consumers: ["Verifica AHT"]
+        notes: "ASSENTE dal piano §4 — trovata scansionando le formule di 'Verifica AHT'."
+      - canonical: "Initiation Method"
+        target_col: M
+        role: input
+        dtype: str
+        aliases: ["initiation_method"]
+        consumers: ["Outbound Exploitation"]
+        notes: "Filtro sul valore OUTBOUND. Le soglie stanno sul foglio (C46/C47/C48), non sono input."
+
+  # --------------------------------------------------------------------------
+  # SF_DATABASE — export Salesforce, 143 colonne. Dati da A.
+  # ATTENZIONE: il foglio ospita la tabella (ListObject) `AHT_Data`. Vedi
+  # docs/audit-workbook-W30.md §3: nel file W30 la tabella copre A1:EM3389
+  # mentre i dati arrivano a riga 3568 -> il writer DEVE ridimensionarla.
+  # --------------------------------------------------------------------------
+  SF_DATABASE:
+    sheet: SF_DATABASE
+    header_row: 1
+    data_start_col: A
+    data_end_col: EM
+    list_object: AHT_Data
+    fields:
+      - canonical: "Case Origin (group)"
+        target_col: U
+        role: input
+        dtype: str
+        aliases: ["case_origin_group"]
+        consumers: ["Report Agenti"]
+        notes: "Valori Phone/Other. Esiste anche 'Case Origin' (col. T): normalizzano diverso, nessuna ambiguita'."
+      - canonical: "case_has_outgoing_email"
+        target_col: AC
+        role: input
+        dtype: str
+        aliases: []
+        consumers: ["Report Agenti"]
+        notes: "True/False. Usata per la % Non-live senza email in uscita."
+      - canonical: "case_number"
+        target_col: AE
+        role: input
+        dtype: str
+        aliases: ["Case Number", "case_no"]
+        consumers: ["VBA:AddSFRules"]
+        notes: "Citata nei dettagli di malpractice."
+      - canonical: "Employee Name"
+        target_col: BB
+        role: input
+        dtype: str
+        aliases: ["employee_name"]
+        consumers: ["Report Agenti", "Anagrafica", "VBA:AddSFRules"]
+        notes: "Chiave agente. Il VBA la usa per l'ultima riga (End(xlUp) su BB)."
+      - canonical: "Case AHT (mins)"
+        target_col: DY
+        role: input
+        dtype: float
+        aliases: ["case_aht_mins", "AHT (min)"]
+        consumers: ["Report Agenti", "VBA:AddSFRules"]
+        notes: >
+          Da NON confondere con le altre colonne che contengono 'AHT':
+          'AHT due to Misroutes' (DU), 'aht_due_to_misrouted_hours' (DV),
+          'Overall Performance to AHT Target' (EJ), 'logged_hrs_incld_in_aht' (EH).
+          Nessuna collassa su 'case aht mins', quindi exact_first e' sicuro.
+      - canonical: "Co-Browse Usage %"
+        target_col: EC
+        role: input
+        dtype: float
+        aliases: ["cobrowse_usage_pct"]
+        consumers: ["Report Agenti"]
+      - canonical: "Misrouted Cases"
+        target_col: EI
+        role: input
+        dtype: float
+        aliases: ["misrouted_cases"]
+        consumers: ["Report Agenti"]
+
+  # --------------------------------------------------------------------------
+  # PSAT_DATASET — export survey, 134 colonne (il piano diceva 121: l'export
+  # e' cresciuto). Dati da A.
+  # --------------------------------------------------------------------------
+  PSAT_DATASET:
+    sheet: PSAT_DATASET
+    header_row: 1
+    data_start_col: A
+    data_end_col: ED
+    fields:
+      - canonical: "Agent Name"
+        target_col: I
+        role: input
+        dtype: str
+        match: exact
+        aliases: []
+        consumers: ["Report Agenti", "Recap PSAT Positive", "PSAT Positive Export"]
+        notes: >
+          match=exact obbligatorio: esiste anche 'agent_name' (col. BO), che
+          normalizza sulla stessa stringa. Un rename dell'header deve far
+          fallire il preflight, non ripiegare silenziosamente su BO.
+      - canonical: "Survey Date (Exact)"
+        target_col: AU
+        role: input
+        dtype: datetime
+        aliases: ["survey_date_exact"]
+        consumers: ["Recap PSAT Positive"]
+        notes: >
+          ASSENTE dal piano §4 — trovata scansionando le formule di
+          'Recap PSAT Positive'. Nel sorgente esistono anche 'Survey Date' (DB)
+          e 'Survey Date (Relative)' (AV): normalizzano diverso.
+      - canonical: "Case Number"
+        target_col: DO
+        role: input
+        dtype: str
+        aliases: ["case_number"]
+        consumers: ["Recap PSAT Positive", "PSAT Positive Export"]
+      - canonical: "psat_score"
+        target_col: DP
+        role: input
+        dtype: float
+        match: exact
+        aliases: []
+        consumers: ["Report Agenti", "Recap PSAT Positive", "PSAT Positive Export"]
+        notes: >
+          Valori 0/1. match=exact obbligatorio: esiste anche 'PSAT Score'
+          (col. EK) che normalizza sulla stessa stringa ma ha scala diversa.
+      - canonical: "response_text"
+        target_col: DQ
+        role: input
+        dtype: str
+        aliases: ["comment", "verbatim"]
+        consumers: ["Recap PSAT Positive"]
+        notes: >
+          'Elogio della settimana': alcune celle di 'Recap PSAT Positive'
+          puntano alla riga FISSA 130 (DQ130/I130/DO130) = selezione manuale
+          del commento migliore. Fuori contratto, vedi piano §14 domanda 3.

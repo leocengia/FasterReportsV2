@@ -1,0 +1,24 @@
+# Input/output di runtime — mai versionati
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Excel
+~$*.xls*
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db

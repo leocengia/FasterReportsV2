@@ -1,0 +1,47 @@
+# Impostazioni operative. Il CONTRATTO delle colonne sta in columns.yml:
+# qui ci sono solo percorsi e scelte di esecuzione.
+
+# csv  -> legge da input/ (oggi)
+# sql  -> non ancora implementato (piano §13). Il contratto non cambia.
+source: csv
+
+paths:
+  input: input
+  output: output
+  template: template/Omni_Report_TEMPLATE.xlsm
+
+# Nome dei file attesi in input/ per ciascun dataset.
+input_files:
+  AT_DATASET: AT.csv
+  ATwi_DATASET: ATwi.csv
+  SF_DATABASE: SF.csv
+  PSAT_DATASET: PSAT.csv
+
+output:
+  # {week} viene sostituito dal numero settimana passato alla CLI
+  workbook_name: "Omni_Report_W{week}.xlsm"
+  preflight_name: "preflight_W{week}.txt"
+
+excel:
+  visible: false
+  # La macro mostra due MsgBox (fine esecuzione ed errore): bloccanti in
+  # automazione. Il template va patchato con un flag SilentMode — piano §12,
+  # istruzioni in docs/architettura.md §6.
+  macro: Refresh_Dettaglio_Malpractice
+  silent_mode_flag: SilentMode
+  # Le formule ad array (XLOOKUP/FILTER/UNIQUE) + INDIRECT sono volatili:
+  # serve un rebuild completo, non un calculate() semplice.
+  full_rebuild: true
+
+derived:
+  # formula -> le formule P/Q del template calcolano Data/Ora Milano (default:
+  #            fedele, nessuna logica duplicata in Python)
+  # python  -> la pipeline scrive i valori (piu' rapido su 130k righe)
+  mode: formula
+
+validation:
+  # Quota massima di valori non coercibili per colonna prima di bloccare.
+  # 0.0 = tolleranza zero. Le celle vuote non contano come non coercibili.
+  max_uncoercible_ratio: 0.02
+  # Numero minimo di righe dati per considerare un dataset plausibile.
+  min_rows: 1

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fasterreports"
+version = "0.1.0"
+description = "Automazione dei report settimanali Omni Report e WOW AHT Trend"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# xlwings serve solo per scrivere/ricalcolare: richiede Excel desktop.
+# Il core (ingestione, matching, preflight) gira senza.
+excel = ["xlwings>=0.30"]
+# openpyxl solo per LETTURA offline (audit, baseline dei test). Mai in scrittura.
+audit = ["openpyxl>=3.1", "oletools>=0.60"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+omni-report = "fasterreports.omni.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

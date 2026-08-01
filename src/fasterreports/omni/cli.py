@@ -24,9 +24,15 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 
 def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--week", required=True, help="numero settimana, es. 31")
-    p.add_argument("--input", type=Path, help="cartella CSV (default: input/)")
+    p.add_argument("--input", type=Path, help="cartella sorgenti (default: input/)")
     p.add_argument("--output", type=Path, help="cartella di output (default: output/)")
     p.add_argument("--config", type=Path, help="cartella config (default: config/)")
+    p.add_argument(
+        "--only", nargs="+", metavar="DATASET",
+        help="limita a questi dataset (es. --only Turni 'Slot Only Cases'). "
+             "Utile per ricaricare i soli turni dopo un cambio in corsa. "
+             "AT_DATASET viene incluso comunque: da lui si ricava la settimana.",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -70,8 +76,10 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "visible", False):
             settings = _replace(settings, excel=_replace(settings.excel, visible=True))
 
+        only = _resolve_only(contract, getattr(args, "only", None))
+
         if args.command == "preflight":
-            report, _ = run_preflight(contract, settings)
+            report, _ = run_preflight(contract, settings, only=only)
             path = report.write(settings.preflight_path(args.week))
             print(report.render())
             print(f"Report salvato in: {path}")
@@ -109,6 +117,29 @@ def _replace(settings, **kw):
     from dataclasses import replace
 
     return replace(settings, **kw)
+
+
+def _resolve_only(contract, names) -> set[str] | None:
+    """Valida `--only` e aggiunge le dipendenze implicite.
+
+    `AT_DATASET` entra sempre: la settimana a cui ritagliare le sorgenti WFM si
+    ricava dalle sue date. E il roster entra se si chiede il back office, perché
+    il filtro degli agenti viene da lui.
+    """
+    if not names:
+        return None
+    unknown = [n for n in names if n not in contract.datasets]
+    if unknown:
+        raise PipelineError(
+            f"--only: dataset sconosciuti: {', '.join(repr(n) for n in unknown)}\n"
+            f"  Disponibili: {', '.join(sorted(contract.datasets))}"
+        )
+    wanted = set(names)
+    if any(contract.datasets[n].reader != "csv" for n in wanted):
+        wanted.add("AT_DATASET")
+    if "Slot Only Cases" in wanted:
+        wanted.add("Turni")
+    return wanted
 
 
 def _print_contract(contract) -> None:

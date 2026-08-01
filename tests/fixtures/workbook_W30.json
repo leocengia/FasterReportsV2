@@ -332,6 +332,32 @@
         "EC": "reflectiq_theme_2",
         "ED": "reflectiq_theme_3"
       }
+    },
+    "Turni": {
+      "dimension": "A1:I1141",
+      "hidden": false,
+      "columns": {
+        "A": "Nome agente",
+        "B": "Team/Skill",
+        "C": "Contratto",
+        "D": "Ore/gg",
+        "E": "Data",
+        "F": "Stato",
+        "G": "Inizio turno",
+        "H": "Fine turno",
+        "I": "chiave"
+      }
+    },
+    "Slot Only Cases": {
+      "dimension": "A1:E1291",
+      "hidden": false,
+      "columns": {
+        "A": "chiave (nome BO norm.)",
+        "B": "Data",
+        "C": "Slot inizio",
+        "D": "Slot fine",
+        "E": "Stato BO"
+      }
     }
   },
   "usage": {
@@ -426,7 +452,34 @@
       "DQ": [
         "Recap PSAT Positive"
       ]
-    }
+    },
+    "Turni": {
+      "A": [
+        "Helper Turni"
+      ],
+      "B": [
+        "Helper Turni"
+      ],
+      "C": [
+        "Helper Turni"
+      ],
+      "D": [
+        "Helper Turni"
+      ],
+      "E": [
+        "Helper Turni"
+      ],
+      "F": [
+        "Helper Turni"
+      ],
+      "G": [
+        "Helper Turni"
+      ],
+      "I": [
+        "Helper Turni"
+      ]
+    },
+    "Slot Only Cases": {}
   },
   "tables": [
     {

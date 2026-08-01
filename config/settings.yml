@@ -11,11 +11,43 @@ paths:
   template: template/Omni_Report_TEMPLATE.xlsm
 
 # Nome dei file attesi in input/ per ciascun dataset.
+# I primi quattro sono CSV; gli ultimi due sono .xlsx in forma di matrice larga
+# (un agente per riga, una colonna per giorno) e passano dagli adattatori di
+# core/wfmsource.py. Quale lettore usare sta in columns.yml (`reader:`).
 input_files:
   AT_DATASET: AT.csv
   ATwi_DATASET: ATwi.csv
   SF_DATABASE: SF.csv
   PSAT_DATASET: PSAT.csv
+  Turni: Turni.xlsx
+  Slot Only Cases: Back_Office_Time.xlsx
+
+sources:
+  # Skill che entrano nel report. Confronto per UGUAGLIANZA ESATTA, come il
+  # FILTER di 'Helper Turni' (Turni!$B="HPO").
+  skills: ["HPO"]
+
+  # Le skill marcate con asterisco (`HPO   *`) entrano nel report?
+  #
+  # false = fedele a oggi: restano fuori da 'Turni' ma il preflight BLOCCA,
+  #         perche' quegli agenti finiscono comunque in 'Slot Only Cases' e le
+  #         regole di malpractice li valutano a meta' (docs/audit-workbook-W30.md §3).
+  # true  = entrano. Cambia i numeri rispetto alle settimane precedenti.
+  #
+  # Non c'e' un default innocuo: la scelta va fatta. Lasciato a false perche'
+  # non tocca i numeri storici senza che qualcuno lo decida.
+  include_marked_skills: false
+
+  # Foglio da leggere in ciascuna sorgente (null = il primo).
+  roster_sheet: publish
+  backoffice_sheet: Only Cases Shifts
+
+  # Sezioni del foglio back office da includere (null = tutte quelle di agenti).
+  backoffice_sections: null
+
+  # Il lunedi' della settimana, come seriale Excel. Se null, si ricava
+  # dall'intervallo di AT_DATASET!Start Time: una verita' sola invece di due.
+  monday_serial: null
 
 output:
   # {week} viene sostituito dal numero settimana passato alla CLI

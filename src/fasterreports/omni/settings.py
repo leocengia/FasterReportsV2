@@ -25,6 +25,18 @@ class ValidationSettings:
 
 
 @dataclass(frozen=True)
+class SourceSettings:
+    """Parametri delle sorgenti WFM (roster turni e back office)."""
+
+    skills: tuple[str, ...] = ("HPO",)
+    include_marked_skills: bool = False
+    roster_sheet: str | None = "publish"
+    backoffice_sheet: str | None = "Only Cases Shifts"
+    backoffice_sections: tuple[str, ...] | None = None
+    monday_serial: int | None = None
+
+
+@dataclass(frozen=True)
 class Settings:
     root: Path
     source: str = "csv"
@@ -36,7 +48,9 @@ class Settings:
     preflight_name: str = "preflight_W{week}.txt"
     excel: ExcelSettings = field(default_factory=ExcelSettings)
     validation: ValidationSettings = field(default_factory=ValidationSettings)
+    sources: SourceSettings = field(default_factory=SourceSettings)
     derived_mode: str = "formula"
+    contratti: dict[str, str] = field(default_factory=dict)
 
     def workbook_path(self, week: str) -> Path:
         return self.output_dir / self.workbook_name.format(week=week)
@@ -85,9 +99,39 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
         p = Path(p)
         return p if p.is_absolute() else root / p
 
+    src = raw.get("sources") or {}
+    sources = SourceSettings(
+        skills=tuple(src.get("skills") or ("HPO",)),
+        include_marked_skills=bool(src.get("include_marked_skills", False)),
+        roster_sheet=src.get("roster_sheet") or None,
+        backoffice_sheet=src.get("backoffice_sheet") or None,
+        backoffice_sections=(
+            tuple(src["backoffice_sections"]) if src.get("backoffice_sections") else None
+        ),
+        monday_serial=(int(src["monday_serial"]) if src.get("monday_serial") else None),
+    )
+
+    # La mappa dei contratti è un file a parte: è dato HR, cambia con altri
+    # tempi rispetto ai percorsi e alle scelte di esecuzione.
+    contratti: dict[str, str] = {}
+    contratti_path = path.parent / "contratti.yml"
+    if contratti_path.is_file():
+        body = yaml.safe_load(contratti_path.read_text(encoding="utf-8")) or {}
+        raw_map = body.get("contratti") or {}
+        if not isinstance(raw_map, dict):
+            raise ContractError(
+                f"{contratti_path.name}: 'contratti' deve essere una mappa "
+                f"nome -> contratto."
+            )
+        from ..core.names import normalize_name
+
+        contratti = {normalize_name(k): str(v) for k, v in raw_map.items() if v}
+
     return Settings(
         root=root,
         source=source,
+        sources=sources,
+        contratti=contratti,
         input_dir=resolve(paths.get("input", "input")),
         output_dir=resolve(paths.get("output", "output")),
         template=resolve(paths.get("template", "template/Omni_Report_TEMPLATE.xlsm")),

@@ -73,6 +73,10 @@ class Dataset:
     list_object: str | None = None
     max_template_row: int | None = None
     derive_offset_from: str | None = None
+    # Da quale lettore arriva il dataset. `csv` (default) legge da input/*.csv;
+    # `wfm_roster` e `wfm_backoffice` da matrici larghe .xlsx che vanno prima
+    # portate in forma lunga (core/wfmsource.py).
+    reader: str = "csv"
 
     @property
     def input_fields(self) -> tuple[Field, ...]:
@@ -110,6 +114,7 @@ class Contract:
 _VALID_DTYPES = {"str", "float", "int", "datetime"}
 _VALID_ROLES = {"input", "derived"}
 _VALID_MATCH = {"exact_first", "exact"}
+_VALID_READERS = {"csv", "wfm_roster", "wfm_backoffice"}
 
 
 def load_contract(path: str | Path) -> Contract:
@@ -175,8 +180,16 @@ def parse_contract(raw: dict) -> Contract:
                     f"source={f.source!r}, che non e' un campo input di questo dataset."
                 )
 
+        reader = str(body.get("reader", "csv"))
+        if reader not in _VALID_READERS:
+            raise ContractError(
+                f"Dataset {name}: reader={reader!r} non valido "
+                f"(ammessi: {', '.join(sorted(_VALID_READERS))})."
+            )
+
         datasets[name] = Dataset(
             name=name,
+            reader=reader,
             sheet=str(body["sheet"]),
             header_row=int(body["header_row"]),
             data_start_col=str(body["data_start_col"]).upper(),

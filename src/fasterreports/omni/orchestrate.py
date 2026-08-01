@@ -45,31 +45,116 @@ class BuildResult:
         return self.workbook is not None and self.report.ok
 
 
+def _open_source(contract: Contract, settings: Settings, dataset, ctx: dict):
+    """Apre la sorgente giusta per il dataset, secondo `reader` del contratto.
+
+    I 4 CSV passano da `csvsource`; `Turni` e `Slot Only Cases` dagli adattatori
+    WFM, che riducono una matrice larga a righe tidy. A valle non cambia nulla:
+    entrambi restituiscono `(headers, rows)`.
+    """
+    path = settings.input_path(dataset.name)
+    if dataset.reader == "csv":
+        return read_csv(path)
+
+    from ..core.wfmsource import read_backoffice, read_roster
+
+    week = ctx.get("week")
+    if week is None:
+        raise PipelineError(
+            f"{dataset.name}: non so a quale settimana ritagliare la sorgente.\n"
+            f"  Le sorgenti WFM coprono mesi (il roster del W30 va dal 20/07 al "
+            f"15/09), quindi la settimana è obbligatoria.\n"
+            f"  Di norma si ricava da AT_DATASET!Start Time; se AT_DATASET non è\n"
+            f"  leggibile, imposta sources.monday_serial in settings.yml."
+        )
+
+    if dataset.reader == "wfm_roster":
+        src = read_roster(
+            path,
+            week=week,
+            skills=settings.sources.skills,
+            include_marked=settings.sources.include_marked_skills,
+            contratti=settings.contratti,
+            sheet_name=settings.sources.roster_sheet,
+        )
+        ctx["roster_notes"] = src.notes
+        ctx["target_agents"] = set(src.notes.target_agents)
+        return src
+
+    if dataset.reader == "wfm_backoffice":
+        src = read_backoffice(
+            path,
+            week=week,
+            sections=settings.sources.backoffice_sections,
+            aliases=ctx.get("aliases"),
+            allowed_keys=ctx.get("target_agents"),
+            sheet_name=settings.sources.backoffice_sheet,
+        )
+        ctx["backoffice_notes"] = src.notes
+        return src
+
+    raise PipelineError(f"{dataset.name}: reader {dataset.reader!r} non implementato.")
+
+
+def _dataset_order(contract: Contract) -> list:
+    """I dataset in ordine di dipendenza.
+
+    `AT_DATASET` per primo: da lui si ricava la settimana. Poi il roster, che
+    produce l'elenco degli agenti. Poi il back office, che ci si filtra sopra.
+    """
+    rank = {"csv": 0, "wfm_roster": 1, "wfm_backoffice": 2}
+    return sorted(
+        contract.datasets.values(),
+        key=lambda d: (rank.get(d.reader, 9), 0 if d.name == "AT_DATASET" else 1, d.name),
+    )
+
+
 def run_preflight(
     contract: Contract,
     settings: Settings,
     *,
     build_blocks: bool = True,
+    only: set[str] | None = None,
 ) -> tuple[PreflightReport, dict[str, Block]]:
-    """Valida i CSV e, se richiesto, costruisce i blocchi canonici.
+    """Valida le sorgenti e, se richiesto, costruisce i blocchi canonici.
 
     Non tocca Excel: si puo' (e si deve) lanciare anche solo per controllare che
     gli export della settimana siano a posto.
     """
     report = PreflightReport(generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     blocks: dict[str, Block] = {}
+    ctx: dict = {}
 
-    for name, dataset in contract.datasets.items():
-        path = settings.input_path(name)
+    if settings.sources.monday_serial:
+        from ..core.wfmsource import week_bounds
+
+        ctx["week"] = week_bounds(settings.sources.monday_serial)
+
+    # La tabella alias vive nel template, dov'e' anche il VBA che la usa.
+    if settings.template.is_file():
         try:
-            source = read_csv(path)
+            from ..core.wfmsource import read_alias_map
+
+            ctx["aliases"] = read_alias_map(settings.template)
+        except PipelineError:
+            ctx["aliases"] = {}
+
+    for dataset in _dataset_order(contract):
+        name = dataset.name
+        if only and name not in only:
+            continue
+        try:
+            source = _open_source(contract, settings, dataset, ctx)
         except PipelineError as exc:
             from ..core.preflight import DatasetReport
 
-            report.datasets.append(DatasetReport(name=name, source=str(path), error=str(exc)))
+            report.datasets.append(
+                DatasetReport(name=name, source=str(settings.input_path(name)), error=str(exc))
+            )
             continue
 
         ds_report = check_dataset(contract, dataset, source)
+        ds_report.notes = getattr(source, "notes", None)
         report.datasets.append(ds_report)
 
         if ds_report.ok and build_blocks:
@@ -88,7 +173,69 @@ def run_preflight(
             ds_report.block = block
             blocks[name] = block
 
+            # La settimana si ricava da AT_DATASET, non si scrive due volte.
+            if name == "AT_DATASET" and "week" not in ctx:
+                ctx["week"] = _week_from_at(dataset, ds_report.mapping, block)
+
+    report.coherence = _run_coherence(contract, settings, report, blocks, ctx)
     return report, blocks
+
+
+def _week_from_at(dataset, mapping, block):
+    """Intervallo di date coperto da `AT_DATASET!Start Time`."""
+    from ..core.contract import col_to_index
+    from ..core.wfmsource import week_from_dates
+
+    fld = next((f for f in dataset.input_fields if f.canonical == "Start Time"), None)
+    if fld is None:
+        return None
+    off = fld.target_index - col_to_index(dataset.data_start_col)
+    return week_from_dates(row[off] for row in block.rows if off < len(row))
+
+
+def _run_coherence(contract, settings, report, blocks, ctx):
+    from ..core.coherence import check_sources
+
+    turni = blocks.get("Turni")
+    slot = blocks.get("Slot Only Cases")
+    if not (ctx.get("roster_notes") or turni or slot):
+        return None
+
+    email = None
+    if settings.template.is_file():
+        email = _read_email_agenti(settings.template)
+
+    return check_sources(
+        roster_notes=ctx.get("roster_notes"),
+        backoffice_notes=ctx.get("backoffice_notes"),
+        turni_rows=turni.rows if turni else None,
+        slot_rows=slot.rows if slot else None,
+        at_dates=ctx.get("week"),
+        email_agenti=email,
+        contratti=settings.contratti,
+        wanted_skills=settings.sources.skills,
+        include_marked=settings.sources.include_marked_skills,
+        aliases_available=bool(ctx.get("aliases")),
+    )
+
+
+def _read_email_agenti(template) -> set[str] | None:
+    """Nomi presenti in `Email Agenti` del template, normalizzati."""
+    try:
+        from ..core.names import normalize_name
+        from ..core.xlsxsource import read_sheet
+
+        sheet = read_sheet(template, "Email Agenti")
+    except PipelineError:
+        return None
+    out = set()
+    for rownum in sheet.rows:
+        if rownum == 1:
+            continue
+        nome = sheet.cell("A", rownum)
+        if nome and str(nome).strip():
+            out.add(normalize_name(nome))
+    return out or None
 
 
 def build(contract: Contract, settings: Settings, week: str) -> BuildResult:

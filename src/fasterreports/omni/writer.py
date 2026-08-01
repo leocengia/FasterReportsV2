@@ -23,6 +23,13 @@ Tre cose che il workbook reale impone e che il piano non menzionava:
 3. Il VBA trova l'ultima riga con `End(xlUp)` su `AT_DATASET!B` e
    `SF_DATABASE!BB`. Righe vecchie rimaste sotto i dati nuovi verrebbero
    incluse nei conteggi. Quindi: pulire prima di scrivere, sempre.
+
+`Turni` e `Slot Only Cases` passano dallo stesso percorso ma sono i casi
+**semplici**: zero formule, nessun ListObject, nessuna colonna derivata. Per
+loro `_clear_data` pulisce un intervallo contiguo (`A:I` e `A:E`) fino
+all'ultima riga usata del foglio — che serve, perché nel W30 `Turni` è
+dimensionato fino a riga 1141 mentre i dati sono 252: c'è molto spazio in cui
+possono annidarsi residui di settimane precedenti, e il VBA li leggerebbe.
 """
 
 from __future__ import annotations

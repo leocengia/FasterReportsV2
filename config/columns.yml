@@ -266,3 +266,150 @@ datasets:
           'Elogio della settimana': alcune celle di 'Recap PSAT Positive'
           puntano alla riga FISSA 130 (DQ130/I130/DO130) = selezione manuale
           del commento migliore. Fuori contratto, vedi piano §14 domanda 3.
+
+  # --------------------------------------------------------------------------
+  # Turni — NON viene da un CSV: da un roster WFM in forma di matrice larga
+  # (un agente per riga, una colonna per giorno, la cella contiene il turno
+  # "0900_1300_1330_1630"). L'adattatore `core.wfmsource.read_roster` lo porta
+  # in forma lunga ed emette già queste colonne, quindi qui sono tutte `input`.
+  #
+  # La trasformazione è verificata contro il W30: 252 righe ricostruite = 252
+  # righe nel workbook, chiavi identiche. Vedi tools/golden_turni.py.
+  #
+  # ATTENZIONE al filtro: `Helper Turni!A2` fa
+  #   FILTER(Turni!$A, ..., Turni!$B="HPO")   -> UGUAGLIANZA ESATTA
+  # quindi una skill scritta `HPO   *` esclude l'agente in silenzio. È il caso
+  # misurato di Nora Ed Dahir (docs/audit-workbook-W30.md §3).
+  # --------------------------------------------------------------------------
+  Turni:
+    sheet: Turni
+    header_row: 1
+    data_start_col: A
+    data_end_col: I
+    reader: wfm_roster
+    fields:
+      - canonical: "Nome agente"
+        target_col: A
+        role: input
+        dtype: str
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        notes: "Name + Surname della sorgente, concatenati con uno spazio."
+      - canonical: "Team/Skill"
+        target_col: B
+        role: input
+        dtype: str
+        consumers: ["Helper Turni"]
+        notes: >
+          FILTRO: solo `HPO` esatto entra nel report. Assente dal piano §5,
+          che elencava solo A/C/D/E/F/G.
+      - canonical: "Contratto"
+        target_col: C
+        role: input
+        dtype: str
+        consumers: ["Helper Turni"]
+        notes: >
+          NON derivabile dalla sorgente: con `Expected hours`=0600 ci sono sia
+          FT (5 agenti) sia PT (2). Dato HR esterno, da config/contratti.yml.
+          Nessun calcolo dipende da lui: di Helper Turni il motore legge solo
+          B, N, R.
+      - canonical: "Ore/gg"
+        target_col: D
+        role: input
+        dtype: float
+        consumers: ["Helper Turni"]
+        notes: >
+          (fine turno − inizio turno) − (fine pausa − inizio pausa), in ore,
+          arrotondato a 2 decimali. Verificato su Ahmed Afifi e Viktoriia
+          Lavrinets. Solo le righe LAVORA lo valorizzano: i SUMIFS di
+          Helper Turni filtrano su Stato="LAVORA".
+      - canonical: "Data"
+        target_col: E
+        role: input
+        dtype: datetime
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        notes: "Dall'intestazione della colonna-giorno del roster."
+      - canonical: "Stato"
+        target_col: F
+        role: input
+        dtype: str
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        notes: >
+          LAVORA se la cella contiene un turno, FERIE-OFF se contiene Off.
+          La sorgente ha anche `Training` (28 celle) e `Flessibilità` (13):
+          non compaiono nel W30, quindi non si sa come il processo manuale li
+          tratti. La pipeline li salta e li segnala — vedi coherence.
+      - canonical: "Inizio turno"
+        target_col: G
+        role: input
+        dtype: float
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        notes: "Primo HHMM della cella, come frazione di giorno."
+      - canonical: "Fine turno"
+        target_col: H
+        role: input
+        dtype: float
+        consumers: []
+        notes: >
+          Nessuna formula e nessun VBA la legge: si scrive per fedeltà al
+          foglio, non perché serva.
+      - canonical: "chiave"
+        target_col: I
+        role: input
+        dtype: str
+        consumers: ["Helper Turni"]
+        notes: >
+          Nome normalizzato con core.names.normalize_name, che replica la
+          formula di `Helper Turni!P`. È la chiave di join di TUTTI i
+          SUMIFS/MINIFS di Helper Turni: se non combacia, le ore previste
+          diventano 0 senza errore. Valorizzata solo sulle righe LAVORA, come
+          nel W30.
+
+  # --------------------------------------------------------------------------
+  # Slot Only Cases — dal foglio back-office, anch'esso una matrice larga.
+  # Letto SOLO dal VBA (`LoadSlots`), nessuna formula lo tocca.
+  # 259 righe ricostruite = 259 nel W30, chiavi identiche.
+  # --------------------------------------------------------------------------
+  Slot Only Cases:
+    sheet: Slot Only Cases
+    header_row: 1
+    data_start_col: A
+    data_end_col: E
+    reader: wfm_backoffice
+    fields:
+      - canonical: "chiave (nome BO norm.)"
+        target_col: A
+        role: input
+        dtype: str
+        consumers: ["VBA:LoadSlots"]
+        notes: >
+          Nome normalizzato nello spazio di nomi del ROSTER (verificato: le 37
+          chiavi del W30 coincidono con gli agenti HPO del roster, marcato
+          incluso). La tabella alias di `Helper Malpractice`!D:E si usa solo per
+          *raggiungere* quello spazio, non per lasciarlo — mescola due
+          direzioni, vedi core/wfmsource._resolve_key.
+      - canonical: "Data"
+        target_col: B
+        role: input
+        dtype: datetime
+        consumers: ["VBA:LoadSlots"]
+      - canonical: "Slot inizio"
+        target_col: C
+        role: input
+        dtype: float
+        consumers: ["VBA:LoadSlots"]
+      - canonical: "Slot fine"
+        target_col: D
+        role: input
+        dtype: float
+        consumers: ["VBA:LoadSlots"]
+      - canonical: "Stato BO"
+        target_col: E
+        role: input
+        dtype: str
+        consumers: ["VBA:LoadSlots"]
+        notes: >
+          BOT quando c'è uno slot orario, NO BOT quando la sorgente dice NO BOT.
+          Il W30 non contiene MAI 'NO BOT' (il processo manuale lascia vuoto),
+          benché il VBA abbia un ramo `If status <> "NO BOT"`: scrivendolo
+          esplicitamente quel ramo fa quello per cui è stato scritto. L'esito
+          numerico non cambia. Le celle REQUEST restano vuote, come nel W30.

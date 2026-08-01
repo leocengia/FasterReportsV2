@@ -127,6 +127,44 @@ If SilentMode Then Err.Raise Err.Number, , Err.Description
 template non espone quella Sub, si ferma con un errore parlante invece di
 appendersi su un dialogo invisibile.
 
+## 6-bis. `Turni` e `Slot Only Cases`: sei fonti, non quattro
+
+Nella prima passata li avevo messi fra la "config mantenuta a mano". Sbagliato:
+sono dati settimanali come i 4 CSV. Ora sono nel contratto, e i loro guasti nel
+workbook reale sono documentati in `audit-workbook-W30.md` §8.
+
+Le loro sorgenti non sono tabelle: sono **matrici larghe** (un agente per riga,
+una colonna per giorno). Servono quindi due adattatori, in
+`core/wfmsource.py`, che le riducono a righe tidy e restituiscono la stessa
+coppia `(headers, rows)` di `csvsource.read_csv`. Da lì in poi la pipeline non
+cambia: matcher, coercizioni, preflight e writer sono gli stessi.
+
+Quale lettore usare sta nel contratto (`reader: csv | wfm_roster |
+wfm_backoffice`), non nel codice. È la stessa astrazione prevista per il futuro
+SQL (§7).
+
+**Semplificazione rispetto al piano.** Il piano proponeva `role: computed` e
+`dtype: time` per far calcolare al contratto la chiave e le frazioni di giorno.
+Non servono: gli adattatori emettono già i valori finali (float e datetime), che
+il core gestisce. Meno macchinari, stesso risultato — e la logica di
+trasformazione sta dove è specifica, nell'adattatore, invece di diventare un
+meccanismo generico usato una volta sola.
+
+**Ordine di lettura.** I dataset non sono indipendenti:
+`AT_DATASET` → da lui si ricava la settimana a cui ritagliare le sorgenti (che
+coprono mesi) → il roster → il back office, che si filtra sugli agenti del
+roster. `orchestrate._dataset_order` lo impone, e `--only` aggiunge le
+dipendenze implicite invece di lasciar fallire il run.
+
+**Una sola verità per la settimana.** Non si scrive in due posti: si ricava
+dall'intervallo di `AT_DATASET!Start Time`. `sources.monday_serial` esiste solo
+come scavalco.
+
+**Una sola verità per gli alias nomi.** La tabella sta in
+`Helper Malpractice!D:E`, dov'è anche il VBA che la usa: la pipeline legge
+quella, non una copia in config. Se il template non c'è ancora, il preflight lo
+dice — senza gli alias quattro agenti risulterebbero orfani per un motivo falso.
+
 ## 7. Sorgente SQL
 
 `settings.yml` ha `source: csv|sql`; `sql` oggi rifiuta con un messaggio che dice
@@ -139,7 +177,7 @@ piano §13, e la forma del core e' stata scelta per renderlo vero.
 
 Distinzione importante, nello spirito della sezione *Provenienza* del contesto WOW.
 
-**Provato, con test che girano** (133 test, nessuna dipendenza da Excel):
+**Provato, con test che girano** (296 test, nessuna dipendenza da Excel):
 
 - normalizzazione e priorita' di match, incluse le collisioni reali del W30;
 - resilienza: colonne mescolate e rinominate negli alias → output **identico**;
@@ -147,7 +185,15 @@ Distinzione importante, nello spirito della sezione *Provenienza* del contesto W
 - coercizioni, comprese quelle che devono **rifiutare** (`1 2`, `1.234,56`);
 - caricamento e validazione del contratto;
 - il contratto contro le intestazioni e le formule reali del W30;
-- il preflight end-to-end via CLI su CSV a 143 colonne con ordine stravolto.
+- il preflight end-to-end su sei fonti, con CSV a 143 colonne in ordine stravolto;
+- il parser dei turni su **tutte le 26 forme** del roster reale, piu' i casi che
+  devono fallire;
+- **il golden test dei due fogli WFM**: ricostruiti dalle sorgenti, 252 = 252
+  righe per `Turni` e 259 = 259 per `Slot Only Cases`, chiavi identiche, con le
+  sole tre differenze dichiarate in anticipo. E' il test piu' importante del
+  repo: il risultato del processo manuale e' la specifica;
+- i controlli di coerenza, uno per uno, con la distinzione fra blocco e
+  segnalazione — che e' la sostanza del modulo.
 
 **Scritto ma mai eseguito** — questo ambiente non ha Excel:
 

@@ -182,10 +182,205 @@ case type) somiglia a quella del WOW AHT Trend, e `manualEXPORT` +
 `formatCopy(Macro)` suggeriscono un altro passaggio manuale settimanale. Da
 chiarire prima di dargli un posto nell'architettura.
 
-## 8. Domande aperte che questo audit aggiunge
+## 8. `Turni` e `Slot Only Cases` sono fonti, non config
+
+Nella prima passata li avevo classificati come "config mantenuta a mano". Sono
+invece **dati settimanali**, che arrivano da due export in forma di **matrice
+larga** (un agente per riga, una colonna per giorno). Il foglio del workbook è in
+forma lunga: serve un unpivot.
+
+Rigenerabile con:
+
+```bash
+python tools/audit_shift_forms.py "samples/omni-report/sorgenti/Turni_W30.xlsx"
+python tools/golden_turni.py --workbook "samples/omni-report/Omni Report W30.xlsm" \
+    --roster "samples/omni-report/sorgenti/Turni_W30.xlsx" \
+    --backoffice "samples/omni-report/sorgenti/Back_Office_Time_Final.xlsx" --monday 46223
+```
+
+### 8.1 Le due sorgenti
+
+| | `Turni_W30.xlsx` (foglio `publish`) | `Back_Office_Time_Final.xlsx` (`Only Cases Shifts`) |
+|---|---|---|
+| dimensione | `A1:VP132`, 130 righe agente | `A1:FH78`, 74 righe |
+| formule | 4 (irrilevanti) | **2873** — è un file di lavoro vivo, non un export |
+| colonne-giorno | 494, dal 20/07/2026 al 15/09/2026 | 150, dal 04/05/2026 |
+| intestazione data | testo `gg/mm/aaaa` | seriale Excel |
+| contenuto cella | `0900_1331_1431_1800` (inizio, inizio pausa, fine pausa, fine) | `1000_1030`, `NO BOT`, `REQUEST`, numeri |
+
+Il roster ha **due blocchi affiancati** (`A`–`F` + date, poi `KI`–`KN` + date) con
+popolazioni diverse: 130 e 107 agenti, **96 in comune e 65 di questi con skill
+diversa fra i due blocchi**. Il blocco 2 non contiene alcun `HPO`, quindi per
+l'Omni Report si ignora — ma contiene `HPS`, che somiglia a `HPO` quanto basta a
+fare danni: il confronto deve essere per uguaglianza, mai per "contiene". Se un
+giorno un agente fosse `HPO` in entrambi i blocchi produrrebbe righe doppie, e
+`Helper Turni` gli conterebbe le ore due volte: c'è un controllo che blocca.
+
+Il foglio back-office ha **sezioni** (`HPO`, `Part-Time 6h`, `Part-Time 5h / 4h`)
+e righe di totale (`Total BO Hrs`, `PSP BO Hrs`, `intervals`, e l'etichetta
+`Agents in Only Cases per Interval`): non è una tabella piatta.
+
+### 8.2 Le 26 forme delle celle-turno
+
+Enumerate prima di scrivere il parser, perché diverse non erano prevedibili:
+
+| Occorrenze | Forma | Interpretazione |
+|---|---|---|
+| 48985 | cella vuota | non schedulato |
+| 3761 + 3352 | `0900_1331_1431_1800` (± spazio finale) | turno con pausa |
+| 5481 | `off` / `Off` / `OFF` | riposo |
+| 1530 + altri | `0900_1300_1400_1800 O` | turno, **marcatore ` O`** |
+| 294 + 202 | `0800_1200_␣␣␣␣_␣␣␣␣` | turno **senza pausa** |
+| 144 + 69 | `s0900_1230_1300_1700` | turno, **prefisso `s`** |
+| 57 + 24 + 21 | `_1000_1239_1339_1800` | turno, **underscore iniziale** |
+| 101 | `␣␣␣_␣␣␣_␣␣␣_␣␣␣ O` | non schedulato, con marcatore |
+| 79 | `OFF␣␣␣␣␣␣␣␣␣␣␣O` | riposo con marcatore |
+| **28** | **`Training`** | **né turno né riposo** |
+| **13** | **`Flessibilità`** | **né turno né riposo** |
+| 2 | `o1400 1430` | turno, prefisso `o`, **separatore spazio** |
+
+`Training` e `Flessibilità` non compaiono nel W30: non si sa come il processo
+manuale li tratti, quindi la pipeline **salta** quelle righe e le segnala.
+Trattarle come riposo falserebbe le ore previste.
+
+I marcatori (` O` 1839 volte, prefisso `s` 220, underscore iniziale 230,
+prefisso `o` 2) hanno significato **non documentato**. Il parser li conserva
+invece di scartarli: se un giorno si scopre che ` O` vuol dire straordinario, il
+dato non è già stato buttato.
+
+### 8.3 La semantica, ricavata dal confronto
+
+Il W30 contiene il risultato prodotto da queste stesse sorgenti, quindi la
+trasformazione si verifica invece di indovinarla.
+
+| `Turni` | Da | Regola |
+|---|---|---|
+| `A` Nome agente | `Name` + `Surname` | concatenati con uno spazio |
+| `B` Team/Skill | `Skill` | copia; solo `HPO` **esatto** entra |
+| `C` Contratto | — | non derivabile, vedi 8.5 |
+| `D` Ore/gg | cella | `(fine − inizio) − pausa`, in ore, **2 decimali** |
+| `E` Data | intestazione colonna | seriale Excel |
+| `F` Stato | cella | `LAVORA` / `FERIE-OFF` |
+| `G`/`H` Inizio/Fine turno | cella | 1° e ultimo `HHMM`, frazione di giorno |
+| `I` chiave | `A` | `normalize_name`, **solo sulle righe LAVORA** |
+
+Verifica aritmetica (Ahmed Afifi): `0900_1300_1330_1630` → 7,5h − 0,5h = **7h**,
+e il workbook dice 7. `0800_1300_1330_1630` → **8h**, workbook 8.
+`0900_1400_␣␣␣_␣␣␣` → **5h**, workbook 5.
+
+L'arrotondamento a 2 decimali viene da **un solo campione**: Viktoriia Lavrinets,
+20/07, turno 08:00–13:11 = 5,1833h, e il workbook ha `5.18`. Non si distingue da
+un troncamento; con altre settimane va riverificato, e il golden test lo
+intercetterebbe.
+
+Esito del confronto: **252 righe ricostruite = 252 nel workbook**, chiavi
+identiche, e **259 = 259** per gli slot. Le sole differenze, tutte dichiarate in
+anticipo:
+
+- sulle righe `FERIE-OFF` il workbook ha valori spazzatura (`Ore/gg`=8,
+  `Inizio turno`=1447); la pipeline scrive celle vuote. Nessuna formula le legge:
+  ogni SUMIFS/MINIFS di `Helper Turni` filtra `Stato="LAVORA"`.
+- `Stato BO`: la pipeline scrive `NO BOT` dove il processo manuale lascia vuoto.
+  Il VBA ha un ramo `If status <> "NO BOT"` che oggi **non scatta mai**; l'esito
+  numerico non cambia (senza orari la riga viene scartata comunque), ma
+  l'intenzione diventa leggibile.
+
+### 8.4 Il guasto: un agente che sparisce a metà
+
+`Turni` ha 36 agenti, `Slot Only Cases` ne ha 37. Il differenziale è **Nora Ed
+Dahir**, e la causa è misurabile:
+
+```
+sorgente, riga 43:  Skill = 'HPO                *'
+Helper Turni!A2  =  FILTER(Turni!$A, ..., Turni!$B="HPO")   <- uguaglianza esatta
+```
+
+Oggi, nel report della W30:
+
+- **è in `Slot Only Cases`** → la regola "Available Cases fuori turno" la valuta
+- **non è in `Turni`** → nessuna ora prevista, nessun orario di inizio turno,
+  quindi "Login in ritardo" la giudica contro il `defaultStart` del VBA
+  (`Helper Malpractice!B8` = 0,375 = 09:00) invece del suo turno reale
+
+Nessun errore, nessuna cella rossa: solo una riga che manca. Lo stesso marcatore
+esiste su `VRBO␣␣*` (2 agenti) e `RELO␣␣*` (10 nel blocco 2): è sistematico, non
+un errore di battitura.
+
+Il default della pipeline è **fedele a oggi** (l'agente resta fuori) ma il
+preflight **blocca**, da due direzioni indipendenti: il controllo sulle skill
+quasi-uguali e quello sugli insiemi di agenti. Per includerla:
+`sources.include_marked_skills: true` in `settings.yml` — cambia i numeri, quindi
+è una scelta esplicita.
+
+### 8.5 La tabella alias mescola due direzioni
+
+`Helper Malpractice!D:E` (righe 3–10, letta da `CreaMalpractice.LoadSlots`)
+contiene 7 alias utili, e non sono tutti dello stesso tipo:
+
+| Alias | Direzione |
+|---|---|
+| `alessandro passierello` → `alessandro passariello` | grafia back-office → **grafia roster** |
+| `asia chirrullo` → `asia chirullo` | idem |
+| `kaotar garoui` → `kaotar garaoui` | idem |
+| `victoriia lavrinets` → `viktoriia lavrinets` | idem |
+| `eleonora rosa sissa` → `eleonora sissa` | grafia roster → **grafia Salesforce** |
+| `glenda martina medola` → `glenda medola` | idem |
+| `nadia ariefieva` → `nadiia ariefieva` | idem |
+
+Il foglio `Slot Only Cases` usa la grafia del **roster** (verificato: le sue 37
+chiavi coincidono esattamente con gli agenti HPO del roster). Applicare la
+tabella alla cieca porterebbe quei 3 agenti *fuori* da quello spazio di nomi, e
+le loro 21 righe sparirebbero.
+
+Quindi la regola: l'alias si usa per **raggiungere** lo spazio dei nomi del
+roster, non per lasciarlo — se la chiave è già valida si tiene, altrimenti si
+prova l'alias.
+
+### 8.6 `Contratto` non è derivabile — misurato
+
+`Expected hours` → `Contratto` sui 36 agenti:
+
+| Expected hours | Contratto | Agenti |
+|---|---|---|
+| `0400` | PT | 1 |
+| `0500` | PT | 1 |
+| `0600` | **FT** | 5 |
+| `0600` | **PT** | 2 |
+| `0800` | FT | 27 |
+
+Con `0600` esistono sia FT sia PT: nessuna regola può produrlo dalla sorgente.
+È un dato HR esterno, e sta in `config/contratti.yml`.
+
+Non entra in alcun calcolo: `Helper Turni!C` lo espone, ma di `Helper Turni` il
+motore legge solo `B`, `N`, `R`. Un nome mancante lascia la cella vuota e il
+preflight lo segnala, senza bloccare.
+
+### 8.7 Un buco nell'audit tool, corretto
+
+Nelle formule i nomi di foglio con spazi sono **fra apici**:
+`'Slot Only Cases'!$A$2`. Il pattern originale pretendeva `Cases!` e non li
+vedeva: `Email Agenti` risultava "letto da nessuna formula", che è falso (lo
+leggono `Anagrafica` e `Helper Turni`). Serve anche un confine a sinistra che
+escluda lo spazio, altrimenti `Turni` cattura le colonne di `Helper Turni`.
+
+## 9. Domande aperte che questo audit aggiunge
 
 Le domande dei due piani restano in piedi (piano §15, contesto WOW §11). Questo
-audit ne aggiunge quattro, tutte da girare a Leonardo:
+audit ne aggiunge otto, tutte da girare a Leonardo. Le prime quattro nascono dai
+fogli nuovi, le altre dai dataset:
+
+0. **Nora Ed Dahir deve entrare nel report?** Il suo `Skill` è `HPO␣␣␣*`.
+   Oggi è dentro per metà delle regole (§8.4). Cambia i numeri della W30.
+1. **Cosa segna l'asterisco** in `Skill` (`HPO␣*`, `VRBO␣*`, `RELO␣*`)?
+   È sistematico, non un errore.
+2. **Cosa segna il suffisso ` O`** nelle celle-turno (1839 occorrenze), e i
+   prefissi `s` (220) e `o` (2)? Oggi si conservano ma non si usano.
+3. **`Training` (28 celle) e `Flessibilità` (13)**: contano come ore previste,
+   come riposo, o si ignorano? Oggi si ignorano e si segnalano.
+4. **`REQUEST` nel back office**: richiesta di cambio turno pendente? Oggi vale
+   "nessuno slot", come fa il processo manuale.
+
+E poi:
 
 1. **`Verifica AHT`, `AHT Outliers`, `AHT Outliers Export`, `Profilo Colonne SF`
    fanno parte del ciclo settimanale**, o sono fogli di lavoro nati per

@@ -46,12 +46,28 @@ def test_lettera_non_valida():
 
 def test_contratto_reale_si_carica(contract):
     assert set(contract.datasets) == {
-        "AT_DATASET", "ATwi_DATASET", "SF_DATABASE", "PSAT_DATASET"
+        "AT_DATASET", "ATwi_DATASET", "SF_DATABASE", "PSAT_DATASET",
+        "Turni", "Slot Only Cases",
     }
     at = contract.dataset("AT_DATASET")
     assert at.list_object is None
     assert at.max_template_row == 130000
     assert contract.dataset("SF_DATABASE").list_object == "AHT_Data"
+
+
+def test_reader_per_dataset(contract):
+    """I 4 CSV passano da csvsource, i due fogli WFM dagli adattatori."""
+    assert contract.dataset("AT_DATASET").reader == "csv"
+    assert contract.dataset("Turni").reader == "wfm_roster"
+    assert contract.dataset("Slot Only Cases").reader == "wfm_backoffice"
+
+
+def test_reader_non_valido():
+    raw = _with_fields([{"canonical": "A", "target_col": "A", "role": "input"}])
+    raw["datasets"]["D"]["reader"] = "telepatia"
+    with pytest.raises(ContractError) as e:
+        parse_contract(raw)
+    assert "reader=" in str(e.value)
 
 
 def test_dataset_sconosciuto_elenca_i_disponibili(contract):

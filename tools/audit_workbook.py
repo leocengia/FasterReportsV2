@@ -108,8 +108,19 @@ class Workbook:
 
     def formula_usage(self, datasets: list[str]) -> dict[str, dict[str, set[str]]]:
         usage: dict[str, dict[str, set[str]]] = {d: defaultdict(set) for d in datasets}
+        # Due insidie, entrambe scoperte col sangue su questo workbook:
+        #
+        # 1. I nomi di foglio con spazi, nelle formule, sono fra apici:
+        #    `'Slot Only Cases'!$A$2`. Un pattern che pretende `Cases!` non li
+        #    vede, e il foglio risulta "letto da nessuna formula" — falso.
+        # 2. Un nome di foglio puo' essere sottostringa di un altro:
+        #    `AT_DATASET` sta dentro `PSAT_DATASET`, `Turni` dentro
+        #    `Helper Turni`. Serve un confine a sinistra che escluda anche uno
+        #    spazio, altrimenti si attribuiscono a uno le colonne dell'altro.
         patterns = {
-            d: re.compile(r"(?<![A-Za-z0-9_])" + re.escape(d) + r"!\$?([A-Z]{1,3})\$?\d*")
+            d: re.compile(
+                r"(?<![A-Za-z0-9_ ])" + re.escape(d) + r"'?!\$?([A-Z]{1,3})\$?\d*"
+            )
             for d in datasets
         }
         for name in self.sheets:

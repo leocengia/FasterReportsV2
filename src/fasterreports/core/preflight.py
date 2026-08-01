@@ -28,6 +28,9 @@ class DatasetReport:
     mapping: DatasetMapping | None = None
     block: Block | None = None
     error: str = ""
+    # Osservazioni del lettore (solo sorgenti WFM): skill viste, marcatori,
+    # righe saltate. Non sono errori, ma vanno riportate.
+    notes: object | None = None
 
     @property
     def ok(self) -> bool:
@@ -38,10 +41,15 @@ class DatasetReport:
 class PreflightReport:
     datasets: list[DatasetReport] = field(default_factory=list)
     generated_at: str = ""
+    coherence: object | None = None
 
     @property
     def ok(self) -> bool:
-        return all(d.ok for d in self.datasets)
+        if any(not d.ok for d in self.datasets):
+            return False
+        if self.coherence is not None and not self.coherence.ok:
+            return False
+        return True
 
     @property
     def errors(self) -> list[str]:
@@ -105,6 +113,12 @@ class PreflightReport:
                 )
             unused = d.mapping.unused_headers
             lines.append(f"  colonne sorgente non usate dal motore: {len(unused)}")
+            lines.extend(_render_notes(d.notes))
+
+        if self.coherence is not None:
+            lines.append("")
+            lines.append("### COERENZA FRA LE FONTI")
+            lines.extend(self.coherence.render(indent="  "))
 
         if not self.ok:
             lines.append("")
@@ -118,6 +132,35 @@ class PreflightReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.render(), encoding="utf-8")
         return path
+
+
+def _render_notes(notes) -> list[str]:
+    """Cosa il lettore WFM ha visto: conta perché la trasformazione scarta righe."""
+    if notes is None:
+        return []
+    out: list[str] = []
+    skipped = getattr(notes, "rows_skipped", None)
+    if skipped:
+        out.append(f"  righe sorgente saltate: {len(skipped)}")
+        for s in skipped[:4]:
+            out.append(f"      {s}")
+        if len(skipped) > 4:
+            out.append(f"      ... e altre {len(skipped) - 4}")
+    unsched = getattr(notes, "unscheduled", None)
+    if unsched:
+        out.append(f"  celle senza schedulazione: {len(unsched)}")
+    excluded = getattr(notes, "keys_not_allowed", None)
+    if excluded:
+        out.append(
+            f"  agenti della sorgente esclusi (fuori dal target): "
+            f"{', '.join(sorted(excluded))}"
+        )
+    applied = getattr(notes, "aliases_applied", None)
+    if applied:
+        out.append(f"  alias nomi applicati: {len(applied)}")
+        for k, v in sorted(applied.items()):
+            out.append(f"      {k!r} -> {v!r}")
+    return out
 
 
 def _table(rows: list[tuple[str, ...]], indent: str = "") -> list[str]:

@@ -1,0 +1,26 @@
+# Mappa nome agente -> tipo di contratto, per la colonna `Turni!C`.
+#
+# PERCHE' ESISTE: il contratto NON e' derivabile dal roster. Misurato sul W30,
+# `Expected hours` -> `Contratto` sui 36 agenti:
+#
+#     0400 -> PT   (1 agente)
+#     0500 -> PT   (1)
+#     0600 -> FT   (5)      <-- stesso valore
+#     0600 -> PT   (2)      <-- due contratti diversi
+#     0800 -> FT   (27)
+#
+# Con 0600 esistono sia FT sia PT: nessuna regola puo' produrlo dalla sorgente.
+# E' un dato HR esterno, e va mantenuto qui a mano — come `Email Agenti` per le
+# email.
+#
+# NESSUN CALCOLO DIPENDE DA QUESTA COLONNA: `Helper Turni!C` la espone, ma di
+# `Helper Turni` il motore legge solo B, N, R. Un nome mancante lascia la cella
+# vuota e il preflight lo segnala, senza bloccare.
+#
+# Le chiavi sono nomi normalizzati (minuscolo, senza accenti ne' apostrofi),
+# come li produce core.names.normalize_name.
+
+contratti: {}
+  # esempio:
+  # ahmed afifi: PT
+  # alessandro passariello: FT

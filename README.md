@@ -2,7 +2,7 @@
 
 Automazione dei report settimanali. Due report, un layer di ingestione in comune.
 
-- **Omni Report** — da 4 CSV a workbook finito, con un comando.
+- **Omni Report** — da sei fonti a workbook finito, con un comando.
   Piano: `docs/piano-omni-report.md`.
 - **WOW AHT Trend by CT** — non ancora iniziato, e il perche' e' spiegato:
   `src/fasterreports/wow/README.md`. Contesto: `docs/contesto-wow-aht.md`.
@@ -12,6 +12,12 @@ lettera fissa** (`SF_DATABASE!$BB`, `Cells(r, "DY")`). Se l'export sposta una
 colonna, la lettera punta al dato sbagliato e i numeri sono falsi **senza alcun
 errore**. Davanti al motore c'e' quindi un layer che aggancia le colonne **per
 nome**, e che si ferma con un messaggio chiaro se un nome manca o e' ambiguo.
+
+Sei fonti a settimana: 4 CSV piu' due export WFM in forma di matrice larga
+(`Turni`, `Slot Only Cases`), che vengono riportati in forma lunga. Oltre a
+risparmiare il copia-incolla, i **controlli di coerenza fra le fonti** fanno
+emergere guasti che oggi non si vedono guardando il report — vedi
+`docs/audit-workbook-W30.md` §8.4.
 
 Il motore Excel (formule + VBA) non viene riscritto: resta nel workbook e viene
 pilotato.
@@ -27,11 +33,11 @@ src/fasterreports/
   core/                ingestione condivisa — non sa niente di Excel
   omni/                Omni Report: writer, orchestrate, CLI (xlwings)
   wow/                 WOW AHT Trend (da fare)
-tools/                 audit dei workbook senza aprire Excel
-tests/                 133 test, nessuno richiede Excel
+tools/                 audit dei workbook e golden test, senza aprire Excel
+tests/                 296 test, nessuno richiede Excel
 docs/                  i due piani + architettura + audit del W30
-samples/               i workbook di riferimento (W30)
-input/  output/        inbox CSV e prodotti (non versionati)
+samples/               workbook e sorgenti di riferimento (W30)
+input/  output/        inbox delle fonti e prodotti (non versionati)
 template/              Omni_Report_TEMPLATE.xlsm (da preparare, vedi sotto)
 ```
 
@@ -46,9 +52,17 @@ omni-report preflight --week 31               # valida i CSV, NON apre Excel
 omni-report build --week 31                   # il "pulsante"
 ```
 
-I 4 CSV vanno in `input/` con i nomi indicati in `config/settings.yml`
-(`AT.csv`, `ATwi.csv`, `SF.csv`, `PSAT.csv`). L'ordine delle colonne dentro i
-file **non conta**.
+Le sei fonti vanno in `input/` con i nomi indicati in `config/settings.yml`:
+i 4 CSV (`AT.csv`, `ATwi.csv`, `SF.csv`, `PSAT.csv`) piu' `Turni.xlsx` e
+`Back_Office_Time.xlsx`. L'ordine delle colonne dentro i file **non conta**, e
+le sorgenti WFM possono coprire mesi: la settimana viene ritagliata da sola,
+ricavandola dalle date di `AT_DATASET`.
+
+`--only` ricarica un sottoinsieme, per quando i turni cambiano in corsa:
+
+```bash
+omni-report build --week 31 --only Turni
+```
 
 Exit code: `0` fatto · `1` bloccato da un problema nei dati · `2` uso sbagliato.
 
@@ -93,6 +107,17 @@ python tools/audit_workbook.py "samples/omni-report/Omni Report W30.xlsm" --all
 python tools/extract_vba.py "samples/omni-report/Omni Report W30.xlsm" --columns
 ```
 
+```bash
+# le 26 forme delle celle-turno del roster, e se il parser le regge tutte
+python tools/audit_shift_forms.py "samples/omni-report/sorgenti/Turni_W30.xlsx"
+
+# il golden test: ricostruisce Turni e Slot Only Cases dalle sorgenti
+python tools/golden_turni.py --monday 46223 \
+  --workbook "samples/omni-report/Omni Report W30.xlsm" \
+  --roster "samples/omni-report/sorgenti/Turni_W30.xlsx" \
+  --backoffice "samples/omni-report/sorgenti/Back_Office_Time_Final.xlsx"
+```
+
 `audit_workbook.py` legge l'XML dentro lo zip: nessun Excel, nessun openpyxl,
 quindi funziona anche sul WOW da 60 MB. `--usage` dice quali colonne dei dataset
 sono consumate da quali formule — ed e' cosi' che si sono trovate **tre colonne
@@ -101,13 +126,18 @@ che il piano non aveva** (`docs/audit-workbook-W30.md`).
 ## Test
 
 ```bash
-python -m pytest            # 133 test, ~0,2 s, nessuna dipendenza da Excel
+python -m pytest            # 296 test, <1 s, nessuna dipendenza da Excel
 ```
 
 Fra questi, i tre scenari del piano §11: colonne mescolate e rinominate negli
 alias → output identico; colonna rimossa → blocco con messaggio azionabile.
-E `tests/test_contract_reale.py` verifica il contratto contro le intestazioni e
-le formule del workbook vero: se il workbook evolve, lo dice.
+`tests/test_contract_reale.py` verifica il contratto contro le intestazioni e le
+formule del workbook vero: se il workbook evolve, lo dice.
+
+Il piu' importante e' `tests/test_golden_wfm.py`: ricostruisce `Turni` e
+`Slot Only Cases` dalle sorgenti e li confronta col W30 — 252 = 252 righe e
+259 = 259, chiavi identiche, con solo tre differenze dichiarate in anticipo.
+Il risultato del processo manuale e' la specifica.
 
 ## Documenti
 
@@ -116,4 +146,5 @@ le formule del workbook vero: se il workbook evolve, lo dice.
 | `docs/piano-omni-report.md` | il piano originale dell'Omni Report |
 | `docs/contesto-wow-aht.md` | il contesto originale del WOW AHT |
 | `docs/architettura.md` | decisioni prese, deviazioni dai piani e loro motivo; cosa e' provato e cosa no |
-| `docs/audit-workbook-W30.md` | misure sul workbook vero: contratto verificato, tre colonne mancanti, VBA, tabella `AHT_Data` |
+| `docs/audit-workbook-W30.md` | misure sul workbook vero: contratto verificato, tre colonne mancanti, VBA, tabella `AHT_Data`, le sorgenti WFM e l'agente che sparisce a meta' |
+| `config/contratti.yml` | mappa nome → contratto: dato HR non derivabile dalle sorgenti |

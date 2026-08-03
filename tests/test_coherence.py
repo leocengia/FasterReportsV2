@@ -280,3 +280,54 @@ def test_troncamento_dei_dettagli():
     rep = check_sources(turni_rows=rows, email_agenti=set())
     text = "\n".join(rep.render())
     assert "e altri" in text
+
+
+# --- la settimana scelta e' quella dei dati? -------------------------------
+
+W30 = (date(2026, 7, 20), date(2026, 7, 26))
+
+
+def test_settimana_giusta_con_sbordo_minimo_segnala():
+    """Il caso reale del W30: 3 righe su 26540 finiscono oltre il bordo."""
+    times = ["2026-07-20 06:00:00"] * 100 + ["2026-07-26 20:00:00"]
+    rep = check_sources(at_start_times=times, week=W30, timezone_offset_hours=9.0)
+    f = _finding(rep, "settimana scelta")
+    assert f is not None and f.level == SEGNALA
+    assert rep.ok
+    assert "9 ore" in f.hint  # spiega perche' e' normale
+
+
+def test_settimana_tutta_dentro():
+    times = ["2026-07-20 06:00:00", "2026-07-21 06:00:00"]
+    rep = check_sources(at_start_times=times, week=W30, timezone_offset_hours=9.0)
+    f = _finding(rep, "settimana scelta")
+    assert f.level == SEGNALA and "tutte" in f.summary
+
+
+def test_settimana_completamente_sbagliata_blocca():
+    """`--week 29` con dati della 30: nessuna riga dentro."""
+    times = ["2026-07-20 06:00:00"] * 50
+    sbagliata = (date(2026, 7, 13), date(2026, 7, 19))
+    rep = check_sources(at_start_times=times, week=sbagliata, timezone_offset_hours=9.0)
+    f = _finding(rep, "settimana scelta")
+    assert f.level == BLOCCA
+    assert "NESSUNA riga" in f.summary
+    assert not rep.ok
+
+
+def test_troppi_dati_fuori_settimana_blocca():
+    times = ["2026-07-20 06:00:00"] * 5 + ["2026-08-10 06:00:00"] * 5
+    rep = check_sources(at_start_times=times, week=W30, timezone_offset_hours=9.0)
+    f = _finding(rep, "settimana scelta")
+    assert f.level == BLOCCA
+    assert "50%" in f.summary
+
+
+def test_offset_fuso_conta():
+    """Senza l'offset, un turno serale di Seattle cadrebbe nel giorno sbagliato."""
+    # 19/07 16:00 Seattle + 9h = 20/07 01:00 Milano -> dentro la W30.
+    times = ["2026-07-19 16:00:00"] * 10
+    con = check_sources(at_start_times=times, week=W30, timezone_offset_hours=9.0)
+    senza = check_sources(at_start_times=times, week=W30, timezone_offset_hours=0.0)
+    assert _finding(con, "settimana scelta").level == SEGNALA
+    assert _finding(senza, "settimana scelta").level == BLOCCA

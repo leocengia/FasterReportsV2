@@ -388,3 +388,50 @@ def test_find_roster_blocks_ordine():
     assert blocks[1].fixed["Name"] == "O"
     assert [c for c, _ in blocks[0].dates] == ["G"]
     assert [c for c, _ in blocks[1].dates] == ["Q"]
+
+
+# --- la settimana: dal numero ISO, non dal min/max dei dati -----------------
+
+def test_week_from_iso_combacia_col_workbook():
+    """ISO week 30 del 2026 = i sette giorni che il W30 ha in Turni e Slot."""
+    from fasterreports.core.wfmsource import week_from_iso
+
+    lo, hi = week_from_iso(2026, 30)
+    assert (lo, hi) == (date(2026, 7, 20), date(2026, 7, 26))
+    assert lo.isoweekday() == 1 and hi.isoweekday() == 7
+    assert (hi - lo).days == 6
+
+
+def test_week_from_iso_settimana_invalida():
+    from fasterreports.core.wfmsource import week_from_iso
+
+    with pytest.raises(SourceError):
+        week_from_iso(2026, 99)
+
+
+def test_infer_year_prende_il_prevalente():
+    """A cavallo di capodanno il primo valore puo' essere dell'anno sbagliato."""
+    from fasterreports.core.wfmsource import infer_year
+
+    valori = ["2025-12-29 23:00:00"] + ["2026-01-02 10:00:00"] * 20
+    assert infer_year(valori) == 2026
+
+
+def test_infer_year_senza_date():
+    from fasterreports.core.wfmsource import infer_year
+
+    assert infer_year(["", None, "non una data"]) is None
+
+
+def test_week_from_dates_non_e_la_settimana():
+    """min/max sborda: e' il motivo per cui la settimana viene dal numero ISO.
+
+    Misurato sul W30: l'export di AT e' per data Seattle e, convertito in ora di
+    Milano, arriva al 27 luglio — otto giorni invece di sette.
+    """
+    from fasterreports.core.wfmsource import week_from_dates, week_from_iso
+
+    at = ["2026-07-19 16:00:00", "2026-07-26 16:00:00"]
+    grezzo = week_from_dates(at)
+    assert (grezzo[1] - grezzo[0]).days == 7  # otto giorni: uno di troppo
+    assert grezzo != week_from_iso(2026, 30)

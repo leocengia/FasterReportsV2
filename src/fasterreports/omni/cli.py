@@ -127,15 +127,19 @@ def main(argv: list[str] | None = None) -> int:
 
         only = _resolve_only(contract, getattr(args, "only", None))
 
+        week_number = _week_number(args.week) if hasattr(args, "week") else None
+
         if args.command == "preflight":
-            report, _ = run_preflight(contract, settings, only=only)
+            report, _ = run_preflight(
+                contract, settings, week_number=week_number, only=only
+            )
             path = report.write(settings.preflight_path(args.week))
             print(report.render())
             print(f"Report salvato in: {path}")
             return 0 if report.ok else 1
 
         if args.command == "build":
-            result = build(contract, settings, args.week)
+            result = build(contract, settings, args.week, week_number=week_number, only=only)
             if not result.ok:
                 print(result.report.render(), file=sys.stderr)
                 print(f"\nBLOCCATO. Dettagli in: {result.preflight}", file=sys.stderr)
@@ -166,6 +170,27 @@ def _replace(settings, **kw):
     from dataclasses import replace
 
     return replace(settings, **kw)
+
+
+def _week_number(value) -> int | None:
+    """Il numero di settimana ISO da `--week`.
+
+    Accetta `31`, `W31`, `w31`: e' il numero che determina quali sette giorni
+    ritagliare dalle sorgenti WFM, non solo il nome del file di output.
+    """
+    if value is None:
+        return None
+    s = str(value).strip().lstrip("Ww")
+    if not s.isdigit():
+        raise PipelineError(
+            f"--week {value!r}: attesa la settimana ISO come numero (es. 31 o W31).\n"
+            f"  Da questo numero si ricavano i sette giorni su cui ritagliare\n"
+            f"  'Turni' e 'Slot Only Cases'."
+        )
+    n = int(s)
+    if not 1 <= n <= 53:
+        raise PipelineError(f"--week {value!r}: la settimana ISO va da 1 a 53.")
+    return n
 
 
 def _resolve_only(contract, names) -> set[str] | None:

@@ -596,23 +596,79 @@ def _pick_sheet(path: Path, preferred: str) -> str:
 
 def week_bounds(monday_serial: int) -> tuple[date, date]:
     """Intervallo lunedì–domenica a partire dal seriale del lunedì."""
-    start = _from_serial(monday_serial)
     from datetime import timedelta
 
+    start = _from_serial(monday_serial)
     return start, start + timedelta(days=6)
 
 
-def week_from_dates(values) -> tuple[date, date] | None:
-    """Settimana ricavata dalle date presenti in un dataset già letto.
+def week_from_iso(year: int, week: int) -> tuple[date, date]:
+    """Lunedì–domenica della settimana ISO indicata.
 
-    Serve a legare `Turni`/`Slot` alla settimana di `AT_DATASET` invece di
-    scriverla a mano in due posti.
+    È così che si determina la settimana: dal numero che l'utente passa a
+    `--week`, non dall'intervallo dei dati. Verificato sul W30: la ISO week 30
+    del 2026 va dal 20 al 26 luglio, esattamente i sette giorni che il workbook
+    ha in `Turni` e `Slot Only Cases`.
+    """
+    from datetime import timedelta
+
+    try:
+        monday = date.fromisocalendar(year, week, 1)
+    except ValueError as exc:
+        raise SourceError(
+            f"Settimana ISO non valida: anno {year}, settimana {week} ({exc})."
+        ) from None
+    return monday, monday + timedelta(days=6)
+
+
+def infer_year(values) -> int | None:
+    """Anno prevalente fra le date passate.
+
+    Si prende il piu' frequente e non il primo: gli export sbordano di qualche
+    ora oltre i bordi della settimana, e a cavallo di capodanno il primo valore
+    potrebbe essere dell'anno sbagliato.
+    """
+    from collections import Counter
+
+    years: Counter[int] = Counter()
+    for v in values:
+        d = _as_datetime(v)
+        if d:
+            years[d.year] += 1
+    if not years:
+        return None
+    return years.most_common(1)[0][0]
+
+
+def week_from_dates(values) -> tuple[date, date] | None:
+    """Intervallo coperto dalle date passate: min e max, così come sono.
+
+    NON e' la settimana: l'export di `AT_DATASET` e' per data Seattle, e
+    convertito in ora di Milano sborda oltre i sette giorni (nel W30 arriva al
+    27 luglio con 3 righe). Serve solo per dire *quanto* i dati escono dalla
+    settimana scelta, non per sceglierla.
     """
     seen: list[date] = []
     for v in values:
-        d = to_datetime(v)
+        d = _as_datetime(v)
         if d:
             seen.append(d.date())
     if not seen:
         return None
     return min(seen), max(seen)
+
+
+def _as_datetime(value):
+    """`to_datetime` che ignora cio' che non e' una data invece di sollevare.
+
+    Qui si sta ragionando *su* un insieme di date per capire settimana e anno:
+    un valore sporco va saltato, non deve far fallire il ragionamento. La
+    validazione seria dei tipi l'ha gia' fatta `build_block`, che blocca se
+    troppi valori di una colonna datetime non sono convertibili.
+    """
+    from .coerce import Uncoercible
+
+    try:
+        return to_datetime(value)
+    except Uncoercible:
+        return None

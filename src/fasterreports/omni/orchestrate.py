@@ -113,6 +113,7 @@ def run_preflight(
     contract: Contract,
     settings: Settings,
     *,
+    week_number: int | None = None,
     build_blocks: bool = True,
     only: set[str] | None = None,
 ) -> tuple[PreflightReport, dict[str, Block]]:
@@ -173,24 +174,53 @@ def run_preflight(
             ds_report.block = block
             blocks[name] = block
 
-            # La settimana si ricava da AT_DATASET, non si scrive due volte.
-            if name == "AT_DATASET" and "week" not in ctx:
-                ctx["week"] = _week_from_at(dataset, ds_report.mapping, block)
+            # La settimana: dal numero passato a --week piu' l'anno ricavato dai
+            # dati. NON dall'intervallo di AT_DATASET, che sborda (vedi
+            # `_resolve_week`).
+            if name == "AT_DATASET":
+                ctx["at_start_times"] = _at_start_times(dataset, block)
+                if "week" not in ctx:
+                    ctx["week"] = _resolve_week(ctx["at_start_times"], week_number)
 
     report.coherence = _run_coherence(contract, settings, report, blocks, ctx)
     return report, blocks
 
 
-def _week_from_at(dataset, mapping, block):
-    """Intervallo di date coperto da `AT_DATASET!Start Time`."""
+def _at_start_times(dataset, block) -> list:
+    """I valori di `AT_DATASET!Start Time`, per ricavare anno e copertura."""
     from ..core.contract import col_to_index
-    from ..core.wfmsource import week_from_dates
 
     fld = next((f for f in dataset.input_fields if f.canonical == "Start Time"), None)
     if fld is None:
-        return None
+        return []
     off = fld.target_index - col_to_index(dataset.data_start_col)
-    return week_from_dates(row[off] for row in block.rows if off < len(row))
+    return [row[off] for row in block.rows if off < len(row) and row[off] is not None]
+
+
+def _resolve_week(start_times: list, week_number: int | None):
+    """La settimana su cui ritagliare `Turni` e `Slot Only Cases`.
+
+    Si usa il numero di settimana ISO passato a `--week` piu' l'anno prevalente
+    nei dati, **non** il min/max di `AT_DATASET`.
+
+    Il motivo e' misurato: l'export di AT e' per data Seattle, e `Data Milano` =
+    `INT(Start Time + 9/24)` lo sposta in avanti. Nel W30 le date Milano vanno
+    dal 20 al **27** luglio — otto giorni — mentre `Turni` e `Slot Only Cases`
+    del workbook coprono i sette dal 20 al 26. Prendendo il min/max si
+    caricherebbe un giorno in piu' di turni e slot, e il report conterrebbe dati
+    fuori settimana.
+
+    Verificato: ISO week 30 del 2026 = 20–26 luglio, esattamente i sette giorni
+    del workbook.
+    """
+    from ..core.wfmsource import infer_year, week_from_iso
+
+    if week_number is None:
+        return None
+    year = infer_year(start_times)
+    if year is None:
+        return None
+    return week_from_iso(year, week_number)
 
 
 def _run_coherence(contract, settings, report, blocks, ctx):
@@ -211,12 +241,41 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         turni_rows=turni.rows if turni else None,
         slot_rows=slot.rows if slot else None,
         at_dates=ctx.get("week"),
+        week=ctx.get("week"),
+        at_start_times=ctx.get("at_start_times"),
+        timezone_offset_hours=_timezone_offset(contract, settings),
         email_agenti=email,
         contratti=settings.contratti,
         wanted_skills=settings.sources.skills,
         include_marked=settings.sources.include_marked_skills,
         aliases_available=bool(ctx.get("aliases")),
     )
+
+
+def _timezone_offset(contract: Contract, settings: Settings) -> float:
+    """L'offset Seattle->Milano, letto dal template dove vive.
+
+    Sta in `Helper Malpractice`!B7 (= 9) e alimenta le formule `Data Milano` /
+    `Ora Milano`. Duplicarlo in config vorrebbe dire due verita' che possono
+    divergere.
+    """
+    ref = next(
+        (ds.derive_offset_from for ds in contract.datasets.values() if ds.derive_offset_from),
+        None,
+    )
+    if not ref or not settings.template.is_file():
+        return 0.0
+    sheet_name, _, cell = ref.rpartition("!")
+    sheet_name = sheet_name.strip().strip("'")
+    try:
+        from ..core.xlsxsource import read_sheet
+
+        sheet = read_sheet(settings.template, sheet_name)
+        col = "".join(c for c in cell if c.isalpha())
+        row = int("".join(c for c in cell if c.isdigit()))
+        return float(sheet.cell(col, row))
+    except Exception:
+        return 0.0
 
 
 def _read_email_agenti(template) -> set[str] | None:
@@ -238,9 +297,18 @@ def _read_email_agenti(template) -> set[str] | None:
     return out or None
 
 
-def build(contract: Contract, settings: Settings, week: str) -> BuildResult:
+def build(
+    contract: Contract,
+    settings: Settings,
+    week: str,
+    *,
+    week_number: int | None = None,
+    only: set[str] | None = None,
+) -> BuildResult:
     """Il "pulsante": da input/ a output/Omni_Report_W{week}.xlsm."""
-    report, blocks = run_preflight(contract, settings)
+    report, blocks = run_preflight(
+        contract, settings, week_number=week_number, only=only
+    )
     preflight_path = report.write(settings.preflight_path(week))
 
     if not report.ok:

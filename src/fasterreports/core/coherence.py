@@ -85,6 +85,8 @@ def check_sources(
     wanted_skills: tuple[str, ...] = ("HPO",),
     include_marked: bool = False,
     aliases_available: bool = True,
+    at_start_times: list | None = None,
+    timezone_offset_hours: float = 0.0,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -115,6 +117,9 @@ def check_sources(
     if backoffice_notes is not None:
         _check_stale_cache(rep, backoffice_notes, "back office")
         _check_requests(rep, backoffice_notes)
+
+    if at_start_times is not None and week is not None:
+        _check_at_in_week(rep, at_start_times, week, timezone_offset_hours)
 
     if turni_rows is not None and slot_rows is not None:
         _check_agent_sets(rep, turni_rows, slot_rows)
@@ -251,6 +256,93 @@ def _check_requests(rep, notes) -> None:
                 "Trattate come 'nessuno slot', come fa il processo manuale.\n"
                 "Se una REQUEST accettata deve valere come slot, va chiarito."
             ),
+        ))
+
+
+# --- la settimana e' quella giusta? ---------------------------------------
+
+def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
+    """Quanta attivita' di `AT_DATASET` cade nella settimana scelta.
+
+    E' il controllo che intercetta il `--week` sbagliato. Un po' di sbordo e'
+    normale e va solo detto: l'export di AT e' per data Seattle e `Data Milano`
+    lo sposta di `offset_hours`, quindi qualche riga finisce oltre il bordo (nel
+    W30 sono 3 su 26540). Se invece la maggior parte dei dati e' fuori, la
+    settimana e' sbagliata e proseguire produrrebbe un report di un'altra
+    settimana.
+    """
+    from datetime import timedelta
+
+    from .wfmsource import _as_datetime
+
+    lo, hi = week
+    dentro = fuori = 0
+    giorni_fuori: dict[str, int] = {}
+    for v in start_times:
+        d = _as_datetime(v)
+        if d is None:
+            continue
+        milano = (d + timedelta(hours=offset_hours)).date()
+        if lo <= milano <= hi:
+            dentro += 1
+        else:
+            fuori += 1
+            key = milano.isoformat()
+            giorni_fuori[key] = giorni_fuori.get(key, 0) + 1
+
+    totale = dentro + fuori
+    if not totale:
+        return
+    quota = fuori / totale
+
+    if dentro == 0:
+        rep.add(Finding(
+            check="settimana scelta",
+            level=BLOCCA,
+            summary=(
+                f"NESSUNA riga di AT_DATASET cade nella settimana {lo} .. {hi}"
+            ),
+            details=[f"{k}: {v} righe" for k, v in sorted(giorni_fuori.items())][:10],
+            hint=(
+                "Il numero passato a --week non corrisponde ai dati.\n"
+                "Controlla la settimana, o l'export."
+            ),
+        ))
+    elif quota > 0.20:
+        rep.add(Finding(
+            check="settimana scelta",
+            level=BLOCCA,
+            summary=(
+                f"il {quota:.0%} delle righe di AT_DATASET cade fuori dalla "
+                f"settimana {lo} .. {hi}"
+            ),
+            details=[f"{k}: {v} righe" for k, v in sorted(giorni_fuori.items())][:10],
+            hint=(
+                "Troppi dati fuori settimana: probabile --week sbagliato, oppure\n"
+                "un export che copre un intervallo diverso da quello atteso."
+            ),
+        ))
+    elif fuori:
+        rep.add(Finding(
+            check="settimana scelta",
+            level=SEGNALA,
+            summary=(
+                f"{lo} .. {hi} · {dentro} righe dentro, {fuori} fuori "
+                f"({quota:.1%})"
+            ),
+            details=[f"{k}: {v} righe" for k, v in sorted(giorni_fuori.items())][:6],
+            hint=(
+                f"Normale: l'export di AT e' per data Seattle e Data Milano lo\n"
+                f"sposta di {offset_hours:g} ore, quindi qualche riga sborda oltre il\n"
+                f"bordo della settimana. Le righe fuori restano in AT_DATASET ma\n"
+                f"non hanno turni ne' slot corrispondenti."
+            ),
+        ))
+    else:
+        rep.add(Finding(
+            check="settimana scelta",
+            level=SEGNALA,
+            summary=f"{lo} .. {hi} · tutte le {dentro} righe dentro la settimana",
         ))
 
 

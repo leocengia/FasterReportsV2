@@ -54,6 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
     ct = sub.add_parser("contract", help="stampa il contratto colonne caricato")
     ct.add_argument("--config", type=Path, help="cartella config (default: config/)")
 
+    ck = sub.add_parser(
+        "check",
+        help="verifica ambiente e template, senza provare un build",
+    )
+    ck.add_argument("--config", type=Path, help="cartella config (default: config/)")
+    ck.add_argument(
+        "--no-excel", action="store_true",
+        help="salta la prova di apertura di Excel (utile su una macchina senza Excel)",
+    )
+
     return p
 
 
@@ -69,6 +79,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         settings = load_settings(config_dir / "settings.yml", root=DEFAULT_ROOT)
+
+        if args.command == "check":
+            from .doctor import run_checks
+
+            report = run_checks(contract, settings, try_excel=not args.no_excel)
+            print(report.render())
+            return 0 if report.ok else 1
+
         if args.input:
             settings = _replace(settings, input_dir=args.input)
         if args.output:

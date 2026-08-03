@@ -34,11 +34,11 @@ src/fasterreports/
   omni/                Omni Report: writer, orchestrate, CLI (xlwings)
   wow/                 WOW AHT Trend (da fare)
 tools/                 audit dei workbook e golden test, senza aprire Excel
-tests/                 296 test, nessuno richiede Excel
+tests/                 307 test, nessuno richiede Excel
 docs/                  i due piani + architettura + audit del W30
 samples/               workbook e sorgenti di riferimento (W30)
 input/  output/        inbox delle fonti e prodotti (non versionati)
-template/              Omni_Report_TEMPLATE.xlsm (da preparare, vedi sotto)
+template/              Omni_Report_TEMPLATE.xlsm + come prepararlo
 ```
 
 ## Uso
@@ -47,8 +47,9 @@ template/              Omni_Report_TEMPLATE.xlsm (da preparare, vedi sotto)
 pip install -e '.[dev]'                       # core + test, senza Excel
 pip install -e '.[excel,audit,dev]'           # tutto (richiede Excel desktop)
 
+omni-report check                             # ambiente e template pronti?
 omni-report contract                          # stampa il contratto colonne
-omni-report preflight --week 31               # valida i CSV, NON apre Excel
+omni-report preflight --week 31               # valida le fonti, NON apre Excel
 omni-report build --week 31                   # il "pulsante"
 ```
 
@@ -86,9 +87,11 @@ Agent Name              | I    | Agent Name           | esatto       | disambigu
 
 Due cose mancano, ed entrambe richiedono una macchina con Excel desktop:
 
-1. **`template/Omni_Report_TEMPLATE.xlsm`** — copia di una settimana chiusa con i
-   4 fogli DATASET svuotati (formule `P`/`Q` e VBA intatti) e la patch
-   `SilentMode` al VBA. Istruzioni: `docs/architettura.md` §6.
+1. **`template/Omni_Report_TEMPLATE.xlsm`** — copia di un workbook di una
+   settimana chiusa, piu' la patch `SilentMode` al VBA. **Non serve svuotare i
+   DATASET**: il build li pulisce da se'. Istruzioni passo per passo in
+   `template/COME_PREPARARE_IL_TEMPLATE.md`, e `omni-report check` ti dice se
+   e' a posto senza tentare un build.
 2. **Il collaudo del writer.** Ingestione e preflight hanno test che girano; la
    parte Excel (`omni/writer.py`, `omni/orchestrate.py`) e' scritta sulla
    struttura misurata del W30 ma **non e' mai stata eseguita**: qui non c'e'
@@ -126,7 +129,7 @@ che il piano non aveva** (`docs/audit-workbook-W30.md`).
 ## Test
 
 ```bash
-python -m pytest            # 296 test, <1 s, nessuna dipendenza da Excel
+python -m pytest            # 307 test, <2 s, nessuna dipendenza da Excel
 ```
 
 Fra questi, i tre scenari del piano §11: colonne mescolate e rinominate negli

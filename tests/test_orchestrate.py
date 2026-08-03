@@ -187,6 +187,45 @@ def test_lo_stesso_dataset_come_csv_o_come_xlsx(contratto, cfg, tmp_path):
     assert da_csv["AT_DATASET"].rows == da_xlsx["AT_DATASET"].rows
 
 
+# ---------------------------------------------------------------------------
+# --only: ricarica un sottoinsieme, non ricomincia da capo
+# ---------------------------------------------------------------------------
+
+
+def test_build_parziale_senza_workbook_esistente_si_rifiuta(contratto, cfg):
+    """Il guasto: `--only` ripartiva dal template.
+
+    I fogli non ricaricati sarebbero rimasti pieni dei dati della settimana del
+    template — un report mezzo W31 e mezzo W30, senza che nulla lo dicesse. E il
+    ciclo di scrittura cercava i blocchi di tutti e sei i dataset, quindi
+    andava in KeyError proprio nel caso per cui `--only` esiste.
+    """
+    from fasterreports.core.errors import PipelineError
+    from fasterreports.omni.orchestrate import build
+
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    with pytest.raises(PipelineError) as e:
+        build(contratto, cfg, "31", week_number=31, only={"AT_DATASET"})
+    msg = str(e.value)
+    assert "--only" in msg
+    assert "giro completo" in msg              # cosa fare
+    assert "settimana del template" in msg     # perche'
+
+
+def test_build_completo_non_pretende_il_workbook(contratto, cfg):
+    """Il giro completo riparte dal template: e' l'altro ramo, e non deve
+    inciampare nel controllo appena aggiunto."""
+    from fasterreports.omni.orchestrate import build
+
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    # Le altre cinque fonti mancano, quindi si fermera' al preflight — che e'
+    # un esito, non un'eccezione: il rapporto e' il prodotto.
+    res = build(contratto, cfg, "31", week_number=31)
+    assert res.workbook is None
+    assert res.preflight.is_file()
+    assert "--only" not in res.report.render()
+
+
 def test_due_settimane_in_cartella_bloccano_il_dataset(contratto, cfg):
     scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")], nome="AT DATASET W30.csv")
     scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")], nome="AT DATASET W31.csv")

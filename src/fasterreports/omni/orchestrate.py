@@ -383,17 +383,35 @@ def build(
     if not report.ok:
         return BuildResult(workbook=None, preflight=preflight_path, report=report)
 
-    if not settings.template.is_file():
-        raise PipelineError(
-            f"Template non trovato: {settings.template}\n"
-            f"  Ricavalo dal workbook di una settimana chiusa svuotando i 4 fogli "
-            f"DATASET e aggiungendo il flag SilentMode al VBA.\n"
-            f"  Istruzioni: docs/architettura.md §6."
-        )
-
     out_path = settings.workbook_path(week)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(settings.template, out_path)
+
+    # `--only` ricarica un SOTTOINSIEME: deve scrivere nel workbook che c'e'
+    # gia', non ripartire dal template. Ripartendo dal template i fogli non
+    # ricaricati resterebbero pieni dei dati della settimana del template — un
+    # report mezzo W31 e mezzo W30, senza che nulla lo dica. Meglio pretendere
+    # che il giro completo sia stato fatto almeno una volta.
+    parziale = bool(only) and only != set(contract.datasets)
+    if parziale:
+        if not out_path.is_file():
+            raise PipelineError(
+                f"--only ricarica alcuni fogli di un workbook che esiste gia', ma "
+                f"{out_path.name} non c'e'.\n"
+                f"  Fai prima il giro completo:\n"
+                f"    omni-report build --week {week}\n"
+                f"  Ripartire dal template scrivendo solo "
+                f"{', '.join(sorted(only))} lascerebbe gli altri fogli con i dati "
+                f"della settimana del template."
+            )
+    else:
+        if not settings.template.is_file():
+            raise PipelineError(
+                f"Template non trovato: {settings.template}\n"
+                f"  Ricavalo dal workbook di una settimana chiusa svuotando i 4 fogli "
+                f"DATASET e aggiungendo il flag SilentMode al VBA.\n"
+                f"  Istruzioni: docs/architettura.md §6."
+            )
+        shutil.copy2(settings.template, out_path)
 
     try:
         import xlwings as xw
@@ -417,8 +435,13 @@ def build(
 
         offset = _read_offset(book, contract) if settings.derived_mode == "python" else None
 
+        # Solo i dataset per cui c'e' un blocco: con `--only` gli altri non sono
+        # stati letti, e cercarli qui era un KeyError proprio nel caso in cui
+        # `--only` serve (i turni che cambiano a giro iniziato).
         for name, dataset in contract.datasets.items():
-            block = blocks[name]
+            block = blocks.get(name)
+            if block is None:
+                continue
             if settings.derived_mode == "python" and dataset.derived_fields:
                 block = add_derived(dataset, block, offset or 0.0)
             writes.append(write_block(book, contract, dataset, block))

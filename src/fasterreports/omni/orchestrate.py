@@ -286,12 +286,39 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         timezone_offset_hours=ctx.get("offset_hours", 0.0),
         week_declared=ctx.get("week_declared"),
         week_inferred=ctx.get("week_inferred"),
+        case_owners=_case_owners(contract, blocks),
         email_agenti=email,
         contratti=settings.contratti,
         wanted_skills=settings.sources.skills,
         include_marked=settings.sources.include_marked_skills,
         aliases_available=bool(ctx.get("aliases")),
     )
+
+
+def _case_owners(contract: Contract, blocks: dict) -> dict[str, list]:
+    """I nomi degli agenti che compaiono nelle fonti caso-per-caso.
+
+    Sono le persone che nella settimana hanno lavorato casi. Confrontarle con
+    'Email Agenti' e' un controllo che si puo' fare con i soli quattro dataset,
+    senza roster ne' back office — cioe' subito, appena arrivano gli export.
+    """
+    from ..core.contract import col_to_index
+
+    fonti = {"SF_DATABASE": "Employee Name", "PSAT_DATASET": "Agent Name"}
+    out: dict[str, list] = {}
+    for nome_ds, campo in fonti.items():
+        block = blocks.get(nome_ds)
+        if not block:
+            continue
+        ds = contract.dataset(nome_ds)
+        fld = next((f for f in ds.input_fields if f.canonical == campo), None)
+        if fld is None:
+            continue
+        off = fld.target_index - col_to_index(ds.data_start_col)
+        out[nome_ds] = [
+            r[off] for r in block.rows if off < len(r) and r[off]
+        ]
+    return out
 
 
 def _timezone_offset(contract: Contract, settings: Settings) -> float:

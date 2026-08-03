@@ -89,6 +89,7 @@ def check_sources(
     timezone_offset_hours: float = 0.0,
     week_declared: int | None = None,
     week_inferred: tuple[int, int] | None = None,
+    case_owners: dict[str, list] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -119,6 +120,10 @@ def check_sources(
     if backoffice_notes is not None:
         _check_stale_cache(rep, backoffice_notes, "back office")
         _check_requests(rep, backoffice_notes)
+
+    if case_owners and email_agenti is not None:
+        for fonte, nomi in case_owners.items():
+            _check_case_owners_email(rep, nomi, email_agenti, fonte)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -430,6 +435,45 @@ def _check_agent_sets(rep, turni_rows, slot_rows) -> None:
 
 
 # --- 4/10. anagrafiche ----------------------------------------------------
+
+def _check_case_owners_email(rep, nomi: list, email_agenti: set[str], fonte: str) -> None:
+    """Chi ha lavorato casi ma non ha una email nel template.
+
+    Girava solo su 'Turni', e cosi' il caso piu' probabile restava fuori: un
+    agente che nella settimana **ha chiuso casi** ma non e' nel roster HPO — un
+    ingresso nuovo, un supervisore che copre. `Anagrafica` lo elenca da se'
+    (SORT(UNIQUE(FILTER(SF_DATABASE!BB)))), ma la sua email e' uno XLOOKUP su
+    'Email Agenti' col fallback "": diventa stringa vuota, in silenzio.
+
+    Misurato sulla W31: 'leonardo cengia' e' fra i 37 nomi di SF_DATABASE e non
+    fra i 43 di 'Email Agenti'.
+
+    SEGNALA e non BLOCCA: le regole basate sui casi (AHT alto, caso chiuso
+    veloce, misrouted) escono comunque, con la email vuota. Sono i confronti col
+    turno che si perdono, perche' quelli passano dalla email.
+    """
+    if not email_agenti:
+        return
+    missing = sorted({normalize_name(v) for v in nomi if v} - email_agenti)
+    if missing:
+        rep.add(Finding(
+            check=f"agenti di {fonte} senza email",
+            level=SEGNALA,
+            summary=(
+                f"{len(missing)} nomi presenti in {fonte} non sono in 'Email Agenti'"
+            ),
+            details=missing,
+            hint=(
+                "In 'Anagrafica' compariranno con la email vuota, perche' lo\n"
+                "XLOOKUP su 'Email Agenti' non li trova e ripiega su \"\".\n"
+                "Conseguenza: le regole che passano dalla email (login in ritardo,\n"
+                "pause, Available fuori turno) non li riguardano, mentre quelle sui\n"
+                "casi si. Restano dentro per meta'.\n"
+                "Se devono essere nel report, aggiungi la riga in 'Email Agenti';\n"
+                "se non devono esserci, allora non dovrebbero avere casi qui."
+            ),
+        ))
+
 
 def _check_email_agenti(rep, turni_rows, email_agenti: set[str]) -> None:
     missing = sorted({

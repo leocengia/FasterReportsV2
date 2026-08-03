@@ -141,6 +141,48 @@ def test_agente_senza_email_blocca():
     assert "NESSUNA regola" in f.hint
 
 
+def test_chi_ha_lavorato_casi_ma_non_ha_email_viene_segnalato():
+    """Il caso trovato sulla W31 vera: un nome in SF_DATABASE e non in 'Email
+    Agenti'. Nessun roster serve per vederlo — bastano i quattro dataset."""
+    rep = check_sources(
+        case_owners={"SF_DATABASE": ["Mario Rossi", "Leonardo Cengia", "Mario Rossi"]},
+        email_agenti={"mario rossi"},
+    )
+    f = _finding(rep, "SF_DATABASE senza email")
+    assert f is not None
+    # SEGNALA, non BLOCCA: le regole sui casi escono comunque, con email vuota.
+    assert f.level == SEGNALA
+    assert f.details == ["leonardo cengia"]
+    assert "Anagrafica" in f.hint
+
+
+def test_case_owners_tutti_con_email_nessuna_segnalazione():
+    rep = check_sources(
+        case_owners={"SF_DATABASE": ["Mario Rossi"]},
+        email_agenti={"mario rossi"},
+    )
+    assert _finding(rep, "SF_DATABASE senza email") is None
+
+
+def test_case_owners_senza_email_agenti_non_inventa_un_problema():
+    """Template assente = elenco email non leggibile. Segnalare 37 agenti
+    "senza email" sarebbe rumore su un dato che non abbiamo."""
+    rep = check_sources(case_owners={"SF_DATABASE": ["Mario Rossi"]}, email_agenti=set())
+    assert _finding(rep, "SF_DATABASE senza email") is None
+
+
+def test_case_owners_ogni_fonte_ha_la_sua_riga():
+    rep = check_sources(
+        case_owners={
+            "SF_DATABASE": ["Leonardo Cengia"],
+            "PSAT_DATASET": ["Lucia Verdi"],
+        },
+        email_agenti={"mario rossi"},
+    )
+    assert _finding(rep, "SF_DATABASE senza email") is not None
+    assert _finding(rep, "PSAT_DATASET senza email") is not None
+
+
 def test_agente_senza_contratto_solo_segnala():
     """Nessun calcolo dipende dal contratto: segnalare basta."""
     rep = check_sources(turni_rows=[turni_row("Mario Rossi")], contratti={})

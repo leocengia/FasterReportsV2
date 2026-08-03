@@ -245,19 +245,24 @@ class Slot:
 
     @property
     def stato_bo(self) -> str | None:
-        """Il valore da scrivere in `Slot Only Cases!E`.
+        """Il valore da scrivere in `Slot Only Cases!E`: quello che c'era.
 
-        Il W30 contiene `BOT` o vuoto, mai `NO BOT` — chi incolla lascia la
-        cella vuota. Il VBA però ha un ramo esplicito
-        `If status <> "NO BOT" ...`: la pipeline scrive `NO BOT`, così quel ramo
-        fa quello per cui è stato scritto. L'esito numerico non cambia (senza
-        orari la riga viene scartata comunque), ma l'intenzione diventa
-        leggibile. Vedi docs/audit-workbook-W30.md.
+        Misurato sul W30 (180 `BOT`, 72 `NO BOT`, 7 `REQUEST`): il processo
+        manuale riporta il valore della cella cosi' com'e', e il ramo
+        `If status <> "NO BOT"` del VBA fa quello per cui e' stato scritto.
+
+          Nota per chi legge la storia del progetto: qui c'era scritto che nel
+          W30 `NO BOT` non compariva mai e che il ramo del VBA era morto. Era
+          falso, e la causa era un difetto del nostro lettore .xlsx — le celle
+          vuote autochiudenti si mangiavano le celle successive, quindi `E`
+          risultava vuota. Un errore di misura, non del workbook.
         """
         if self.kind == KIND_SLOT:
             return SLOT_BOT
         if self.kind == KIND_SLOT_NO_BOT:
             return SLOT_NO_BOT
+        if self.kind == KIND_SLOT_REQUEST:
+            return SLOT_REQUEST
         return None
 
 

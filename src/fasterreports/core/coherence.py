@@ -133,6 +133,7 @@ def check_sources(
     if turni_rows is not None and slot_rows is not None:
         _check_agent_sets(rep, turni_rows, slot_rows)
     if turni_rows is not None:
+        _check_skill_scritta(rep, turni_rows, wanted_skills)
         _check_shift_plausibility(rep, turni_rows)
         _check_days_covered(rep, turni_rows, slot_rows)
         if email_agenti is not None:
@@ -399,6 +400,51 @@ def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
 
 
 # --- 3. insiemi di agenti --------------------------------------------------
+
+def _check_skill_scritta(rep, turni_rows, wanted: tuple[str, ...]) -> None:
+    """Ogni riga di `Turni` passa dal FILTER di 'Helper Turni'?
+
+    `Turni!B` ha un solo consumatore, e confronta per uguaglianza esatta:
+
+        Helper Turni!A2 = FILTER(Turni!$A, ..., Turni!$B="HPO")
+
+    Una riga con `HPO                *` sta nel foglio e non entra nel motore:
+    nessuna ora prevista, nessun orario di inizio, e "Login in ritardo"
+    giudicato contro l'orario di default. E' l'ingresso a meta' da cui e'
+    partito tutto il lavoro, e senza questo controllo tornerebbe in silenzio —
+    perche' i due insiemi di agenti (Turni e Slot) combaciano, e sono loro che
+    l'altro controllo confronta.
+
+    Misurato sulla W31 prima della correzione: `Turni` 37 agenti, 'Helper Turni'
+    32.
+    """
+    fuori: dict[str, set[str]] = {}
+    for r in turni_rows:
+        skill = r[1]
+        if skill not in wanted:
+            fuori.setdefault(str(skill), set()).add(normalize_name(r[0]) if r[0] else "?")
+    if fuori:
+        totale = sum(len(v) for v in fuori.values())
+        rep.add(Finding(
+            check="skill che il FILTER non riconoscera'",
+            level=BLOCCA,
+            summary=(
+                f"{totale} agenti in 'Turni' hanno un Team/Skill diverso da "
+                f"{', '.join(repr(s) for s in wanted)}"
+            ),
+            details=[
+                f"{skill!r}: {', '.join(sorted(agenti))}"
+                for skill, agenti in sorted(fuori.items())
+            ],
+            hint=(
+                "'Helper Turni' li scartera' (FILTER con uguaglianza esatta):\n"
+                "finirebbero in 'Turni' senza entrare nei calcoli, che e' il\n"
+                "peggiore dei due esiti perche' sembrano dentro.\n"
+                "Se devono entrare, la skill scritta va portata alla forma\n"
+                "canonica; se non devono, non devono nemmeno stare in 'Turni'."
+            ),
+        ))
+
 
 def _check_agent_sets(rep, turni_rows, slot_rows) -> None:
     turni = {normalize_name(r[0]) for r in turni_rows if r[0]}

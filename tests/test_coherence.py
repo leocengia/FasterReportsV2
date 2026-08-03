@@ -395,3 +395,27 @@ def test_settimana_senza_dichiarazione_solo_informa():
     rep = check_sources(week_inferred=(2026, 30))
     f = _finding(rep, "settimana dedotta")
     assert f.level == SEGNALA and "30" in f.summary
+
+
+def test_skill_non_esatta_in_turni_blocca():
+    """Il guasto trovato sul workbook generato della W31.
+
+    `include_marked_skills: true` includeva i 5 agenti con `HPO   *` in 'Turni'
+    scrivendo la skill grezza. Il FILTER di 'Helper Turni' confronta per
+    uguaglianza esatta, quindi restavano fuori dai calcoli: 'Turni' 37 agenti,
+    'Helper Turni' 32. E i due controlli sugli insiemi di agenti erano verdi,
+    perche' Turni e Slot combaciavano — la riga c'era, semplicemente non serviva
+    a nulla.
+    """
+    rows = [turni_row("Mario Rossi"), turni_row("Lucia Verdi")]
+    rows[1][1] = "HPO                *"
+    rep = check_sources(turni_rows=rows, wanted_skills=("HPO",))
+    f = _finding(rep, "FILTER non riconoscera")
+    assert f is not None and f.level == BLOCCA
+    assert "lucia verdi" in f.details[0]
+    assert "uguaglianza esatta" in f.hint
+
+
+def test_skill_esatta_non_segnala_nulla():
+    rep = check_sources(turni_rows=[turni_row("Mario Rossi")], wanted_skills=("HPO",))
+    assert _finding(rep, "FILTER non riconoscera") is None

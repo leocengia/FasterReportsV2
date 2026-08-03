@@ -256,19 +256,33 @@ def test_slot_orari_identici_dove_c_e_uno_slot(backoffice, wb_slot):
     assert not diffs, "differenze sugli slot veri:\n  " + "\n  ".join(diffs[:10])
 
 
-def test_slot_no_bot_scritto_esplicitamente(backoffice, wb_slot):
-    """Dove il processo manuale lascia vuoto, la pipeline scrive `NO BOT`.
+def test_stato_bo_uguale_a_quello_fatto_a_mano(backoffice, wb_slot):
+    """`Stato BO` deve coincidere, riga per riga, con il W30 fatto a mano.
 
-    Il VBA ha un ramo `If status <> "NO BOT"` che oggi non scatta mai. L'esito
-    numerico non cambia — senza orari la riga viene scartata comunque — ma
-    l'intenzione diventa leggibile.
+    Questo test diceva il contrario: che nel workbook la cella era vuota dove
+    noi scriviamo `NO BOT`. Passava per un difetto del lettore .xlsx — le celle
+    vuote autochiudenti si mangiavano le successive, quindi `E` sembrava vuota.
+    Misurato ora: 180 `BOT`, 72 `NO BOT`, 7 `REQUEST`. Il processo manuale
+    riporta il valore della cella, e il ramo `If status <> "NO BOT"` del VBA
+    serve davvero.
+
+    E' il motivo per cui uno strumento di verifica va verificato: per settimane
+    questo test ha certificato una differenza che non esisteva.
     """
     mine = _as_dict_slot(backoffice)
-    nobot = [k for k, m in mine.items() if m["Stato BO"] == "NO BOT"]
-    assert nobot
-    for key in nobot:
-        assert _blank(wb_slot[key]["Stato BO"])
-        assert mine[key]["Slot inizio"] is None
+    diverse = []
+    for key, m in mine.items():
+        atteso = wb_slot[key]["Stato BO"]
+        atteso = "" if atteso is None else str(atteso).strip()
+        nostro = m["Stato BO"] or ""
+        if nostro != atteso:
+            diverse.append((key, atteso, nostro))
+    assert not diverse, diverse[:5]
+
+    # E le tre forme ci sono tutte: se una sparisse, il confronto sopra
+    # resterebbe verde su un insieme piu' povero.
+    stati = {m["Stato BO"] for m in mine.values()}
+    assert stati == {"BOT", "NO BOT", "REQUEST"}, stati
 
 
 def test_alias_applicati_solo_per_raggiungere_lo_spazio_del_roster(backoffice, aliases):

@@ -277,13 +277,36 @@ Esito del confronto: **252 righe ricostruite = 252 nel workbook**, chiavi
 identiche, e **259 = 259** per gli slot. Le sole differenze, tutte dichiarate in
 anticipo:
 
-- sulle righe `FERIE-OFF` il workbook ha valori spazzatura (`Ore/gg`=8,
-  `Inizio turno`=1447); la pipeline scrive celle vuote. Nessuna formula le legge:
-  ogni SUMIFS/MINIFS di `Helper Turni` filtra `Stato="LAVORA"`.
-- `Stato BO`: la pipeline scrive `NO BOT` dove il processo manuale lascia vuoto.
-  Il VBA ha un ramo `If status <> "NO BOT"` che oggi **non scatta mai**; l'esito
-  numerico non cambia (senza orari la riga viene scartata comunque), ma
-  l'intenzione diventa leggibile.
+- sulle righe `FERIE-OFF` (101 su 252) il workbook ha `Ore/gg` popolato
+  (8 in 69 righe, 6 in 20, poi 10, 9, 5) mentre `Inizio turno` e `Fine turno`
+  sono vuoti; la pipeline lascia vuoto anche `Ore/gg`. Quei valori non sono le
+  `Expected hours` del roster (che nel W30 valgono 0400/0500/0600/0800: 9 e 10
+  non esistono), quindi sono il residuo di un incollaggio precedente. Nessuna
+  formula li legge: ogni SUMIFS/MINIFS di `Helper Turni` filtra
+  `Stato="LAVORA"`, e `LoadTurniStarts` fa lo stesso.
+- sulle righe `FERIE-OFF` il workbook popola anche `chiave` (101 su 101); la
+  pipeline la scrive solo sulle righe `LAVORA`. Stesso ragionamento: nessuno la
+  legge fuori da `LAVORA`.
+
+> **Correzione, e vale piu' delle misure che corregge.** Fino al 3 agosto qui
+> c'era scritto che le righe `FERIE-OFF` contenevano `Inizio turno`=1447, che
+> `chiave` era vuota, e che nel foglio `Slot Only Cases` la stringa `NO BOT` non
+> compariva mai (ramo del VBA morto). Tutte e tre false, e con la stessa causa:
+> un difetto del nostro lettore .xlsx. Le celle vuote autochiudenti
+> (`<c r="C1" s="120"/>`) non venivano riconosciute, e il pattern che cercava
+> `</c>` si prendeva il valore della cella successiva attribuendolo a quella
+> vuota — spostando i valori di colonna e facendone scomparire altri.
+>
+> Misurato col lettore corretto, `Stato BO` nel W30 vale: **180 `BOT`,
+> 72 `NO BOT`, 7 `REQUEST`**. Il processo manuale riporta il valore della cella
+> cosi' com'e', e il ramo `If status <> "NO BOT"` del VBA serve. La pipeline ora
+> fa lo stesso, quindi questa non e' piu' una differenza.
+>
+> La lezione non e' sul workbook: e' che uno strumento di misura va misurato.
+> Quel difetto non produceva errori, produceva numeri nella colonna sbagliata —
+> e per settimane un test golden ha certificato una differenza inesistente.
+> Da qui `tests/test_xlsxsource.py`, che esiste solo per tenere onesto il
+> lettore.
 
 ### 8.4 Il guasto: un agente che sparisce a metà
 

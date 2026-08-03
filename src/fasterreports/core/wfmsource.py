@@ -28,7 +28,7 @@ from .shifts import (
     KIND_ASSENTE,
     KIND_LAVORA,
     KIND_SLOT,
-    KIND_SLOT_NO_BOT,
+    KIND_SLOT_REQUEST,
     ShiftParseError,
     parse_shift,
     parse_slot,
@@ -87,6 +87,10 @@ class SourceNotes:
 
     skills_seen: dict[str, int] = field(default_factory=dict)
     skills_with_marker: dict[str, int] = field(default_factory=dict)
+    # Skill riscritte alla forma canonica per farle passare dal FILTER di
+    # 'Helper Turni', che confronta per uguaglianza esatta. Va detto: cambia il
+    # contenuto di una colonna rispetto alla sorgente.
+    skills_normalized: dict[str, int] = field(default_factory=dict)
     shift_markers: dict[str, int] = field(default_factory=dict)
     non_shift_states: dict[str, list[str]] = field(default_factory=dict)
     unscheduled: list[str] = field(default_factory=list)
@@ -333,6 +337,26 @@ def read_roster(
             accepted = skill in wanted or (include_marked and near)
             if not accepted:
                 continue
+
+            # La skill da SCRIVERE, che non e' sempre quella letta.
+            #
+            # L'unico consumatore di `Turni!B` e' il FILTER di 'Helper Turni', che
+            # confronta per uguaglianza esatta (`Turni!$B="HPO"`). Scrivere
+            # `HPO                *` verbatim significa che l'agente entra nel
+            # foglio e **non** entra nel motore: nessuna ora prevista, nessun
+            # orario di inizio, e "Login in ritardo" giudicato contro l'orario di
+            # default. Dentro per meta', che e' il guasto da cui e' partito tutto.
+            #
+            # Misurato sulla W31: con la skill grezza, `Turni` aveva 37 agenti e
+            # 'Helper Turni' 32. Se si decide di includerli, vanno inclusi per
+            # davvero — e allora la skill scritta e' quella canonica.
+            skill_scritta = skill
+            if skill not in wanted:
+                skill_scritta = next(
+                    (s for s in skills if normalize_skill(s) == normalize_skill(skill)),
+                    skill,
+                )
+                notes._bump(notes.skills_normalized, f"{skill!r} -> {skill_scritta!r}")
             if not nome:
                 notes.rows_skipped.append(
                     f"{block.fixed['Name']}{rownum}: skill {skill!r} ma nome vuoto"
@@ -356,7 +380,7 @@ def read_roster(
 
                 out.append([
                     nome,
-                    skill,
+                    skill_scritta,
                     contratti.get(normalize_name(nome)),
                     shift.net_hours if shift.kind == KIND_LAVORA else None,
                     _to_serial(d),
@@ -506,12 +530,14 @@ def read_backoffice(
                 break
             if slot.kind == KIND_SLOT:
                 out.append([key, _to_serial(d), slot.start, slot.end, slot.stato_bo])
-            elif slot.kind == KIND_SLOT_NO_BOT:
-                out.append([key, _to_serial(d), None, None, slot.stato_bo])
             else:
-                if slot.kind == "request":
+                # Nessuno slot. `Stato BO` riporta comunque il valore della
+                # cella (`NO BOT`, `REQUEST`) perche' e' cio' che fa il processo
+                # manuale — misurato sul W30: 72 `NO BOT` e 7 `REQUEST`. Solo la
+                # cella vuota resta vuota.
+                if slot.kind == KIND_SLOT_REQUEST:
                     notes.slot_requests.append(where)
-                out.append([key, _to_serial(d), None, None, None])
+                out.append([key, _to_serial(d), None, None, slot.stato_bo])
 
     out.sort(key=lambda r: (r[0], r[1]))
     return TidySource(path=path, headers=list(BACKOFFICE_HEADERS), data=out, notes=notes)

@@ -201,9 +201,16 @@ def test_slot_no_bot():
     assert s.start is None
 
 
-def test_slot_request_non_e_uno_slot():
-    """`REQUEST` = cambio turno pendente: nel W30 resta vuoto."""
-    assert parse_slot("REQUEST").stato_bo is None
+def test_slot_request_riportato_come_nel_processo_manuale():
+    """`REQUEST` = cambio turno pendente. Non e' uno slot, ma va scritto.
+
+    Misurato sul W30: 7 celle `REQUEST` nel foglio del workbook. Scriverlo
+    rende il foglio uguale a quello fatto a mano, e lascia visibile che quel
+    giorno una richiesta era pendente.
+    """
+    slot = parse_slot("REQUEST")
+    assert slot.stato_bo == "REQUEST"
+    assert slot.start is None and slot.end is None
 
 
 @pytest.mark.parametrize("raw", ["0", "10", "93", "71.48", "-9.19", "", None])

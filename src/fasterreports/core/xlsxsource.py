@@ -24,8 +24,16 @@ from pathlib import Path
 
 from .errors import SourceError
 
-_CELL = re.compile(r'<c r="([A-Z]+)(\d+)"([^>]*)>(.*?)</c>', re.S)
-_CELL_EMPTY = re.compile(r'<c r="([A-Z]+)(\d+)"([^>]*)/>')
+# Una cella ha DUE forme: `<c r="A1" t="s"><v>3</v></c>` e, quando e' vuota ma
+# formattata, `<c r="A1" s="120"/>`. Vanno riconosciute insieme, in un solo
+# passaggio, altrimenti la forma vuota non chiude nulla e il pattern con `</c>`
+# se la ingoia insieme alle celle che la seguono: il valore di una cella finisce
+# attribuito a un'altra colonna, e quelle in mezzo scompaiono.
+#
+# E' esattamente cio' che faceva questo modulo. Il guasto non produceva errori:
+# produceva numeri, nella colonna sbagliata — cioe' la cosa peggiore possibile
+# in uno strumento che serve a *verificare* i numeri di qualcun altro.
+_CELL = re.compile(r'<c r="([A-Z]+)(\d+)"([^>]*?)(?:/>|>(.*?)</c>)', re.S)
 _ROW = re.compile(r'<row r="(\d+)"[^>]*>(.*?)</row>', re.S)
 
 
@@ -143,6 +151,10 @@ def read_sheet(path: str | Path, sheet_name: str | None = None) -> Sheet:
         body = rm.group(2)
         cells: dict[str, str] = {}
         for col, _r, attrs, inner in _CELL.findall(body):
+            # Cella vuota ma formattata: il gruppo del contenuto non ha
+            # partecipato. Non e' un valore, quindi non entra.
+            if not inner:
+                continue
             t = re.search(r't="([^"]+)"', attrs)
             v = re.search(r"<v>(.*?)</v>", inner, re.S)
             inline = re.search(r"<is>.*?<t[^>]*>(.*?)</t>", inner, re.S)

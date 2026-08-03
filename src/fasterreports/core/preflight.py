@@ -178,6 +178,14 @@ def _render_notes(notes) -> list[str]:
         out.append(f"  alias nomi applicati: {len(applied)}")
         for k, v in sorted(applied.items()):
             out.append(f"      {k!r} -> {v!r}")
+    # Va detto, perche' e' l'unico posto in cui il valore scritto non e' quello
+    # letto: senza la forma canonica il FILTER di 'Helper Turni' scarterebbe
+    # l'agente, e includerlo in 'Turni' non servirebbe a niente.
+    normalizzate = getattr(notes, "skills_normalized", None)
+    if normalizzate:
+        out.append("  skill riscritte alla forma canonica (per il FILTER esatto):")
+        for k, v in sorted(normalizzate.items()):
+            out.append(f"      {k}  ({v} righe)")
     return out
 
 

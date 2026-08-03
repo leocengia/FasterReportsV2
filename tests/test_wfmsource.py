@@ -433,3 +433,46 @@ def test_indice_stringa_condivisa_corrotto_da_errore_chiaro(tmp_path):
     assert "A1" in msg                    # dove
     assert "'12.0'" in msg                # cosa
     assert "corrotto" in msg              # perche'
+
+
+def test_skill_marcata_scritta_alla_forma_canonica(tmp_path):
+    """Includere un agente marcato deve includerlo DAVVERO.
+
+    `Turni!B` ha un solo consumatore, il FILTER di 'Helper Turni', che confronta
+    per uguaglianza esatta. Scrivere `HPO                *` verbatim lo metteva
+    nel foglio e fuori dai calcoli — dentro per meta', il guasto da cui e'
+    partito il progetto.
+    """
+    grid = roster_grid(
+        dates=("20/07/2026",),
+        agents=[
+            ("ROSSI", "0800", "2", "HPO", "Mario", "Rossi", ["0900_1300_1330_1730"]),
+            ("VERDI", "0800", "2", "HPO                *", "Lucia", "Verdi",
+             ["0900_1300_1330_1730"]),
+        ],
+    )
+    p = make_xlsx(tmp_path / "r.xlsx", "publish", grid)
+    src = read_roster(
+        p, week=(date(2026, 7, 20), date(2026, 7, 20)), skills=("HPO",),
+        include_marked=True,
+    )
+    skills = {r[1] for r in src.data}
+    assert skills == {"HPO"}, skills
+    # e la riscrittura viene dichiarata, non fatta di nascosto
+    assert src.notes.skills_normalized
+
+
+def test_skill_marcata_esclusa_non_viene_riscritta(tmp_path):
+    """Con include_marked=False l'agente non c'e' affatto: niente da riscrivere."""
+    grid = roster_grid(
+        dates=("20/07/2026",),
+        agents=[("VERDI", "0800", "2", "HPO                *", "Lucia", "Verdi",
+                 ["0900_1300_1330_1730"])],
+    )
+    p = make_xlsx(tmp_path / "r.xlsx", "publish", grid)
+    src = read_roster(
+        p, week=(date(2026, 7, 20), date(2026, 7, 20)), skills=("HPO",),
+        include_marked=False,
+    )
+    assert src.data == []
+    assert not src.notes.skills_normalized

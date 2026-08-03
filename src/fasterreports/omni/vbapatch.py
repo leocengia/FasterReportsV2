@@ -33,7 +33,21 @@ from ..core.errors import PipelineError
 DEFAULT_MODULE = "CreaMalpractice"
 DEFAULT_FLAG = "SilentMode"
 
-# La dichiarazione va dopo Option Explicit, prima di qualunque altra cosa.
+# Righe che aprono una procedura: il blocco va inserito PRIMA della prima di
+# queste, mai sopra le dichiarazioni di modulo.
+_PROC = re.compile(
+    r"^\s*(?:Public\s+|Private\s+|Friend\s+)?(?:Static\s+)?"
+    r"(?:Sub|Function|Property\s+(?:Get|Let|Set))\s+\w",
+    re.IGNORECASE,
+)
+# Una dichiarazione a livello di modulo: `Private mAHT As String`, `Dim x`,
+# `Public Const K = 1`. Serve al controllo dell'ordine, non all'inserimento.
+_DECL_LINE = re.compile(
+    r"^\s*(?:Public|Private|Dim|Global)\s+(?:Const\s+|WithEvents\s+)?\w+\s*"
+    r"(?:\(|,|\bAs\b|=)",
+    re.IGNORECASE,
+)
+
 # Solo ASCII, come il resto del modulo (l'autore scrive "verita'" invece di
 # "verita" accentata): il testo passa dalla clipboard e da editor di testo, e un
 # carattere non-ASCII e' un problema di codifica in attesa di accadere.
@@ -59,6 +73,85 @@ class PatchError(PipelineError):
 # La trasformazione del testo
 # ---------------------------------------------------------------------------
 
+def _insertion_point(lines: list[str]) -> int:
+    """Dove infilare il blocco: subito prima della prima procedura.
+
+    NON dopo `Option Explicit`, che era l'errore. In VBA la sezione delle
+    dichiarazioni di modulo sta tutta **prima** della prima procedura: mettere un
+    `Sub` in cima spinge le dichiarazioni che seguono dopo un `End Sub`, e il
+    modulo non compila piu' —
+
+        Errore di compilazione: dopo End Sub, End Function o End Property
+        sono ammessi solo commenti
+
+    Il guasto e' peggiore di quanto sembri, perche' Excel compila solo quando
+    serve: il file si salva senza un lamento, `omni-report check` lo legge e lo
+    trova a posto (il testo *e'* patchato), e la cosa esplode all'unico momento
+    che conta — quando la pipeline lancia la macro, con un dialogo modale che in
+    automazione nessuno chiude.
+
+    Se non c'e' nessuna procedura si ripiega dopo `Option Explicit` o dopo
+    l'ultima `Attribute`, che devono restare in cima.
+    """
+    for i, line in enumerate(lines):
+        if _PROC.match(line):
+            # Le righe di commento subito sopra appartengono a quella procedura:
+            # infilarsi fra il commento e il Sub li separerebbe.
+            j = i
+            while j > 0 and lines[j - 1].strip().startswith("'"):
+                j -= 1
+            return j
+
+    # Nessuna procedura: si va dopo l'ULTIMA dichiarazione di modulo. Andare
+    # dopo `Option Explicit` rimetterebbe il Sub sopra le dichiarazioni, cioe'
+    # esattamente il guasto che questa funzione esiste per evitare.
+    idx = max(
+        (i for i, l in enumerate(lines) if _DECL_LINE.match(l)),
+        default=None,
+    )
+    if idx is None:
+        idx = next(
+            (i for i, l in enumerate(lines) if l.strip().startswith("Option Explicit")),
+            None,
+        )
+    if idx is None:
+        idx = max(
+            (i for i, l in enumerate(lines) if l.strip().startswith("Attribute ")),
+            default=-1,
+        )
+    return idx + 1
+
+
+def check_declaration_order(code: str) -> list[str]:
+    """Le dichiarazioni di modulo stanno tutte prima della prima procedura?
+
+    E' il controllo che mancava: senza di lui un modulo che non compila passa
+    per buono, perche' il testo contiene tutto quello che deve contenere. Qui si
+    guarda l'**ordine**, che e' cio' che VBA pretende.
+    """
+    problems: list[str] = []
+    dentro_proc = False
+    for n, line in enumerate(code.replace("\r\n", "\n").split("\n"), start=1):
+        s = line.strip()
+        if not s or s.startswith("'"):
+            continue
+        if _PROC.match(line):
+            dentro_proc = True
+            continue
+        if re.match(r"^\s*End\s+(Sub|Function|Property)\b", line, re.IGNORECASE):
+            continue
+        if dentro_proc and _DECL_LINE.match(line) and not s.lower().startswith("dim "):
+            # `Dim` dentro una procedura e' normale; `Public`/`Private`/`Global`
+            # no, e nemmeno un `Dim` a livello di modulo dopo un End Sub — ma
+            # quest'ultimo non si distingue senza tracciare le uscite, e il caso
+            # reale sono le Private di modulo.
+            problems.append(
+                f"riga {n}: dichiarazione a livello di modulo dopo una procedura "
+                f"-> {s[:60]}"
+            )
+    return problems
+
+
 def patch(code: str, flag: str = DEFAULT_FLAG) -> tuple[str, list[str]]:
     """Applica le tre modifiche. Ritorna (codice, elenco di cosa e' cambiato).
 
@@ -71,19 +164,9 @@ def patch(code: str, flag: str = DEFAULT_FLAG) -> tuple[str, list[str]]:
     if f"Public Sub Set{flag}" in code:
         done.append(f"Set{flag} gia' presente, non ridichiarata")
     else:
-        idx = next(
-            (i for i, l in enumerate(lines) if l.strip().startswith("Option Explicit")),
-            None,
-        )
-        if idx is None:
-            # Nessun Option Explicit: si mette dopo l'ultimo Attribute, non in
-            # cima al file (le Attribute devono restare prime).
-            idx = max(
-                (i for i, l in enumerate(lines) if l.strip().startswith("Attribute ")),
-                default=-1,
-            )
-        block = _DECL.format(flag=flag).rstrip("\n").split("\n")
-        lines[idx + 1 : idx + 1] = block
+        idx = _insertion_point(lines)
+        block = _DECL.format(flag=flag).strip("\n").split("\n")
+        lines[idx:idx] = block + [""]
         done.append(f"aggiunta la dichiarazione di {flag} e Set{flag}")
 
     # --- 2. MsgBox dietro il flag ------------------------------------------
@@ -158,6 +241,7 @@ def verify(code: str, flag: str = DEFAULT_FLAG) -> list[str]:
         problems.append(f"{len(nudi)} MsgBox non protetti: {nudi[0][:60]}")
     if "Err.Raise" not in code:
         problems.append("Err.Raise assente: l'errore non verrebbe propagato")
+    problems += check_declaration_order(code)
     return problems
 
 

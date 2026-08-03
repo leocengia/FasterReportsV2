@@ -295,6 +295,41 @@ def _run_coherence(contract, settings, report, blocks, ctx):
     )
 
 
+def _assert_vba_compilabile(template) -> None:
+    """Ferma il build prima di aprire Excel se il modulo non compila.
+
+    Il modo peggiore in cui questo puo' andare male e' quello che e' andato male:
+    Excel compila il VBA solo quando serve, quindi un modulo con le dichiarazioni
+    nell'ordine sbagliato si salva senza un lamento, e l'errore esce quando la
+    pipeline lancia la macro — come dialogo modale, che in automazione nessuno
+    chiude. Il build resta appeso a tempo indeterminato con Excel aperto.
+
+    Meglio due secondi di lettura del binario e un errore che dice cosa fare.
+    Senza oletools non si puo' leggere il modulo: si passa, senza inventare un
+    allarme che non si e' in grado di verificare.
+    """
+    from .vbapatch import DEFAULT_MODULE, check_declaration_order, read_module
+
+    try:
+        code = read_module(template, DEFAULT_MODULE)
+    except PipelineError:
+        return
+
+    problemi = check_declaration_order(code)
+    if problemi:
+        raise PipelineError(
+            f"Il modulo {DEFAULT_MODULE} del template non compila: "
+            f"{len(problemi)} dichiarazioni di modulo stanno dopo una procedura.\n"
+            f"  VBA lo rifiuta con 'dopo End Sub ... sono ammessi solo commenti',\n"
+            f"  e lo fa con un dialogo che in automazione nessuno puo' chiudere.\n"
+            + "".join(f"    {p}\n" for p in problemi[:5])
+            + f"  Vanno spostate SOPRA la prima Sub del modulo. Il modulo corretto\n"
+            f"  e' in template/CreaMalpractice_patched_da_incollare.vb: aprilo,\n"
+            f"  copia tutto e incollalo sul modulo (Alt+F11, Ctrl+A, incolla).\n"
+            f"  Poi:  omni-report check"
+        )
+
+
 def _case_owners(contract: Contract, blocks: dict) -> dict[str, list]:
     """I nomi degli agenti che compaiono nelle fonti caso-per-caso.
 
@@ -411,6 +446,7 @@ def build(
                 f"DATASET e aggiungendo il flag SilentMode al VBA.\n"
                 f"  Istruzioni: docs/architettura.md §6."
             )
+        _assert_vba_compilabile(settings.template)
         shutil.copy2(settings.template, out_path)
 
     try:

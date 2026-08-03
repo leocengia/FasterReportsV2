@@ -291,3 +291,146 @@ def test_suggerimento_del_doctor_cita_patch_template(contract):
     hint = next(c for c in rep.checks if "SetSilentMode" in c.name).hint
     assert "omni-report patch-template" in hint
     assert "make_vba_patch" in hint
+
+
+# ---------------------------------------------------------------------------
+# L'ordine delle dichiarazioni: il modulo deve COMPILARE
+# ---------------------------------------------------------------------------
+
+MODULO_REALE = '''Attribute VB_Name = "CreaMalpractice"
+Option Explicit
+' ==== Etichette categoria: unica fonte di verita' ====
+Private mAHT As String, mFast As String, mBreakDay As String
+Private mBreakSim As String, mLogin As String, mAC As String
+
+Public Sub Refresh_Dettaglio_Malpractice()
+    On Error GoTo CleanFail
+    MsgBox "fatto", vbInformation
+    Exit Sub
+CleanFail:
+    MsgBox "errore: " & Err.Description, vbExclamation
+End Sub
+
+Private Function NormKey(v As Variant) As String
+    NormKey = LCase(Trim(CStr(v)))
+End Function
+'''
+
+
+def test_il_blocco_va_sotto_le_dichiarazioni_di_modulo():
+    """Il guasto costato un run: il blocco veniva infilato dopo Option Explicit,
+    quindi le `Private` del modulo finivano DOPO un End Sub. VBA rifiuta:
+
+        Errore di compilazione: dopo End Sub, End Function o End Property
+        sono ammessi solo commenti
+
+    E non si vedeva prima, perche' Excel compila solo quando serve: il file si
+    salvava senza un lamento e l'errore usciva quando la pipeline lanciava la
+    macro, come dialogo modale che in automazione nessuno chiude.
+    """
+    from fasterreports.omni.vbapatch import check_declaration_order, patch
+
+    nuovo, _ = patch(MODULO_REALE)
+    assert check_declaration_order(nuovo) == []
+
+    righe = nuovo.split("\n")
+    decl = righe.index("Public SilentMode As Boolean")
+    private = next(i for i, l in enumerate(righe) if l.startswith("Private mAHT"))
+    prima_proc = next(i for i, l in enumerate(righe) if "Sub SetSilentMode" in l)
+    assert private < decl < prima_proc
+
+
+def test_check_declaration_order_trova_il_modulo_rotto():
+    from fasterreports.omni.vbapatch import check_declaration_order
+
+    rotto = (
+        "Option Explicit\n"
+        "Public SilentMode As Boolean\n"
+        "\n"
+        "Public Sub SetSilentMode(ByVal value As Boolean)\n"
+        "    SilentMode = value\n"
+        "End Sub\n"
+        "' ==== Etichette ====\n"
+        "Private mAHT As String, mFast As String\n"
+        "\n"
+        "Public Sub Refresh()\n"
+        "    Dim wb As Workbook\n"
+        "End Sub\n"
+    )
+    problemi = check_declaration_order(rotto)
+    assert len(problemi) == 1
+    assert "riga 8" in problemi[0]
+    assert "mAHT" in problemi[0]
+
+
+def test_dim_dentro_una_procedura_non_e_un_problema():
+    """`Dim` locale e' la cosa piu' normale del mondo: un falso positivo qui
+    renderebbe il controllo inutilizzabile."""
+    from fasterreports.omni.vbapatch import check_declaration_order
+
+    ok = (
+        "Option Explicit\n"
+        "Private m As String\n"
+        "\n"
+        "Public Sub Uno()\n"
+        "    Dim wb As Workbook\n"
+        "    Dim r As Long, c As Long\n"
+        "    Set wb = ThisWorkbook\n"
+        "End Sub\n"
+        "\n"
+        "Private Function Due(ByVal x As Long) As String\n"
+        "    Dim s As String\n"
+        "    Due = s\n"
+        "End Function\n"
+    )
+    assert check_declaration_order(ok) == []
+
+
+def test_verify_bocciava_un_modulo_che_non_compila():
+    """`verify` guardava solo la presenza delle cose, non l'ordine: diceva
+    'nessun problema' su un modulo che VBA rifiuta."""
+    from fasterreports.omni.vbapatch import verify
+
+    rotto = (
+        "Option Explicit\n"
+        "Public SilentMode As Boolean\n"
+        "Public Sub SetSilentMode(ByVal value As Boolean)\n"
+        "    SilentMode = value\n"
+        "End Sub\n"
+        "Private mAHT As String\n"
+        "Public Sub Refresh()\n"
+        "    If Not SilentMode Then MsgBox \"x\"\n"
+        "    If SilentMode Then Err.Raise Err.Number\n"
+        "End Sub\n"
+    )
+    problemi = verify(rotto)
+    assert any("dopo una procedura" in p for p in problemi)
+
+
+def test_il_commento_resta_attaccato_alla_sua_procedura():
+    """Infilarsi fra il commento e la Sub che descrive li separerebbe."""
+    from fasterreports.omni.vbapatch import patch
+
+    code = (
+        "Option Explicit\n"
+        "Private m As String\n"
+        "\n"
+        "' Questo commento descrive Refresh, non il blocco nuovo\n"
+        "Public Sub Refresh()\n"
+        "    MsgBox \"x\"\n"
+        "End Sub\n"
+    )
+    nuovo, _ = patch(code)
+    righe = nuovo.split("\n")
+    commento = next(i for i, l in enumerate(righe) if "descrive Refresh" in l)
+    refresh = next(i for i, l in enumerate(righe) if "Sub Refresh()" in l)
+    assert refresh == commento + 1
+
+
+def test_modulo_senza_procedure_ripiega_su_option_explicit():
+    from fasterreports.omni.vbapatch import check_declaration_order, patch
+
+    code = 'Attribute VB_Name = "X"\nOption Explicit\nPrivate m As String\n'
+    nuovo, _ = patch(code)
+    assert "Public SilentMode As Boolean" in nuovo
+    assert check_declaration_order(nuovo) == []

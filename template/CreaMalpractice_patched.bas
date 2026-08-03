@@ -1,5 +1,8 @@
 Attribute VB_Name = "CreaMalpractice"
 Option Explicit
+' ==== Etichette categoria: unica fonte di verita' ====
+Private mAHT As String, mFast As String, mBreakDay As String
+Private mBreakSim As String, mLogin As String, mAC As String
 
 ' ==== Modalita' silenziosa, per l'esecuzione automatica ====
 ' In automazione un MsgBox blocca il processo a tempo indeterminato, in attesa
@@ -10,9 +13,6 @@ Public SilentMode As Boolean
 Public Sub SetSilentMode(ByVal value As Boolean)
     SilentMode = value
 End Sub
-' ==== Etichette categoria: unica fonte di verita' ====
-Private mAHT As String, mFast As String, mBreakDay As String
-Private mBreakSim As String, mLogin As String, mAC As String
 
 Public Sub Refresh_Dettaglio_Malpractice()
     Dim wb As Workbook: Set wb = ThisWorkbook

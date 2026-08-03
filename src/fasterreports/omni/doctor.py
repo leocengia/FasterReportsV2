@@ -227,6 +227,8 @@ def _check_vba(rep: CheckReport, settings) -> None:
             )
         else:
             rep.add("errore propagato", OK, "Err.Raise presente")
+
+        _check_vba_compilabile(rep, code)
         return
 
     # Ripiego: ricerca nel binario.
@@ -245,6 +247,38 @@ def _check_vba(rep: CheckReport, settings) -> None:
             "Nota: questo controllo cerca nel binario compresso. Per una verifica\n"
             "completa del codice:  pip install -e \".[audit]\"",
         )
+
+
+def _check_vba_compilabile(rep: CheckReport, code: str) -> None:
+    """L'ordine delle dichiarazioni: il modulo compila?
+
+    Questo controllo mancava, e la sua assenza e' costata un run. Il testo puo'
+    contenere tutto il necessario — SetSilentMode, i MsgBox protetti, Err.Raise —
+    ed essere comunque un modulo che VBA rifiuta, perche' in VBA le dichiarazioni
+    di modulo devono stare tutte **prima** della prima procedura.
+
+    Excel compila solo quando serve: il file si salva senza un lamento e questo
+    check lo dava per buono. L'errore usciva al momento peggiore, quando la
+    pipeline lancia la macro, come dialogo modale che in automazione nessuno
+    chiude — cioe' un build appeso a tempo indeterminato.
+    """
+    from .vbapatch import check_declaration_order
+
+    problemi = check_declaration_order(code)
+    if problemi:
+        rep.add(
+            "VBA compilabile", MANCA,
+            f"{len(problemi)} dichiarazioni di modulo dopo una procedura",
+            "VBA rifiutera' il modulo con:\n"
+            "  Errore di compilazione: dopo End Sub, End Function o End Property\n"
+            "  sono ammessi solo commenti\n"
+            "Le righe indicate vanno spostate SOPRA la prima Sub del modulo:\n  "
+            + "\n  ".join(problemi[:5])
+            + "\n\nOppure rigenera la patch, che ora inserisce nel punto giusto:\n"
+            "    omni-report patch-template",
+        )
+    else:
+        rep.add("VBA compilabile", OK, "dichiarazioni prima delle procedure")
 
 
 def _vba_hint(settings) -> str:

@@ -462,3 +462,31 @@ def test_infer_iso_week_senza_date():
     from fasterreports.core.wfmsource import infer_iso_week
 
     assert infer_iso_week(["", None, "non una data"]) is None
+
+
+def test_indice_stringa_condivisa_corrotto_da_errore_chiaro(tmp_path):
+    """Un file riscritto male non deve passare per 'foglio assente'.
+
+    Prima sollevava un ValueError nudo, che chi legge interpretava come foglio
+    mancante e mandava a cercare il problema nel posto sbagliato.
+    """
+    p = tmp_path / "corrotto.xlsx"
+    make_xlsx(p, "publish", {"A1": "x"})
+    # Riscrivo la cella come stringa condivisa con un indice non intero.
+    with zipfile.ZipFile(p) as z:
+        parti = {n: z.read(n) for n in z.namelist()}
+    parti["xl/worksheets/sheet1.xml"] = (
+        b'<?xml version="1.0"?><worksheet><sheetData>'
+        b'<row r="1"><c r="A1" t="s"><v>12.0</v></c></row>'
+        b"</sheetData></worksheet>"
+    )
+    with zipfile.ZipFile(p, "w") as z:
+        for n, data in parti.items():
+            z.writestr(n, data)
+
+    with pytest.raises(SourceError) as e:
+        read_sheet(p, "publish")
+    msg = str(e.value)
+    assert "A1" in msg                    # dove
+    assert "'12.0'" in msg                # cosa
+    assert "corrotto" in msg              # perche'

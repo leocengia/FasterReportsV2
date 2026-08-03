@@ -34,7 +34,7 @@ src/fasterreports/
   omni/                Omni Report: writer, orchestrate, CLI (xlwings)
   wow/                 WOW AHT Trend (da fare)
 tools/                 audit dei workbook e golden test, senza aprire Excel
-tests/                 346 test, nessuno richiede Excel
+tests/                 347 test, nessuno richiede Excel
 docs/                  i due piani + architettura + audit del W30
 samples/               workbook e sorgenti di riferimento (W30)
 input/  output/        inbox delle fonti e prodotti (non versionati)
@@ -123,6 +123,15 @@ python tools/extract_vba.py "samples/omni-report/Omni Report W30.xlsm" --columns
 ```
 
 ```bash
+# estrae i 4 fogli DATASET di un workbook chiuso come CSV: rende il collaudo di
+# una settimana chiusa riproducibile senza dipendere dagli export originali
+python tools/export_datasets_csv.py "samples/omni-report/Omni Report W30.xlsm" -o input/
+
+# confronta un workbook GENERATO con la stessa settimana fatta a mano: e' il
+# collaudo dei numeri finali
+python tools/golden_report.py --generato output/Omni_Report_W30.xlsm \
+  --riferimento "samples/omni-report/Omni Report W30.xlsm"
+
 # le 26 forme delle celle-turno del roster, e se il parser le regge tutte
 python tools/audit_shift_forms.py "samples/omni-report/sorgenti/Turni_W30.xlsx"
 
@@ -141,7 +150,7 @@ che il piano non aveva** (`docs/audit-workbook-W30.md`).
 ## Test
 
 ```bash
-python -m pytest            # 346 test, <2 s, nessuna dipendenza da Excel
+python -m pytest            # 347 test, <2 s, nessuna dipendenza da Excel
 ```
 
 Fra questi, i tre scenari del piano §11: colonne mescolate e rinominate negli

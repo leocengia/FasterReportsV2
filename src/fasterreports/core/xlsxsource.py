@@ -147,7 +147,20 @@ def read_sheet(path: str | Path, sheet_name: str | None = None) -> Sheet:
             v = re.search(r"<v>(.*?)</v>", inner, re.S)
             inline = re.search(r"<is>.*?<t[^>]*>(.*?)</t>", inner, re.S)
             if t and t.group(1) == "s" and v:
-                idx = int(v.group(1))
+                # L'indice della stringa condivisa deve essere un intero: se non
+                # lo e', il file e' corrotto e va detto, non ignorato. Prima
+                # sollevava un ValueError nudo che il chiamante interpretava
+                # come "foglio assente".
+                try:
+                    idx = int(v.group(1))
+                except ValueError:
+                    raise SourceError(
+                        f"{path.name}, foglio {sheet_name!r}, cella {col}{rownum}: "
+                        f"indice di stringa condivisa non valido "
+                        f"({v.group(1)!r}).\n"
+                        f"  Il file e' corrotto: probabilmente e' stato riscritto da "
+                        f"uno strumento che non gestisce sharedStrings."
+                    ) from None
                 val = shared[idx] if idx < len(shared) else ""
             elif t and t.group(1) == "inlineStr" and inline:
                 val = _unescape(inline.group(1))

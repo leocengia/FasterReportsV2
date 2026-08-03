@@ -34,7 +34,7 @@ src/fasterreports/
   omni/                Omni Report: writer, orchestrate, CLI (xlwings)
   wow/                 WOW AHT Trend (da fare)
 tools/                 audit dei workbook e golden test, senza aprire Excel
-tests/                 307 test, nessuno richiede Excel
+tests/                 321 test, nessuno richiede Excel
 docs/                  i due piani + architettura + audit del W30
 samples/               workbook e sorgenti di riferimento (W30)
 input/  output/        inbox delle fonti e prodotti (non versionati)
@@ -129,7 +129,7 @@ che il piano non aveva** (`docs/audit-workbook-W30.md`).
 ## Test
 
 ```bash
-python -m pytest            # 307 test, <2 s, nessuna dipendenza da Excel
+python -m pytest            # 321 test, <2 s, nessuna dipendenza da Excel
 ```
 
 Fra questi, i tre scenari del piano §11: colonne mescolate e rinominate negli

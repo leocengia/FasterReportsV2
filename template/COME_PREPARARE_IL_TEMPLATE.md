@@ -34,7 +34,32 @@ esecuzione, uno nel gestore d'errore. In automazione **bloccano il processo a
 tempo indeterminato**, in attesa di un clic che nessuno darà — e con Excel
 invisibile non si vede nemmeno il dialogo.
 
-Apri l'editor VBA (`Alt+F11`), modulo **`CreaMalpractice`**.
+### La via rapida: fatti generare il modulo già patchato
+
+```bash
+pip install -e ".[audit]"
+python tools/make_vba_patch.py template/Omni_Report_TEMPLATE.xlsm
+```
+
+Legge il VBA vero, applica le tre modifiche e scrive
+`template/CreaMalpractice_patched.bas`, mostrandoti il diff di cosa è cambiato.
+Poi nell'editor VBA (`Alt+F11`): apri il modulo `CreaMalpractice`, `Ctrl+A`, e
+incolla il contenuto del file generato. Salva mantenendo il `.xlsm`.
+
+È idempotente: su un modulo già patchato non fa nulla.
+
+**Perché non modifica il file direttamente.** Il codice sta in
+`xl/vbaProject.bin`, un contenitore OLE dove i moduli sono compressi, e accanto
+al sorgente c'è il **p-code compilato**. Excel, quando le versioni combaciano,
+esegue il p-code e non il sorgente: riscrivendo solo il testo si otterrebbe un
+file che *sembra* patchato e continua a eseguire il codice vecchio. È un modo di
+fallire silenzioso, cioè esattamente il tipo di guasto che questo progetto
+elimina — meglio due minuti di copia-incolla verificabile.
+
+### La via manuale
+
+Se preferisci farlo a mano: apri l'editor VBA (`Alt+F11`), modulo
+**`CreaMalpractice`**.
 
 ### 2a. In testa al modulo, sotto `Option Explicit`
 

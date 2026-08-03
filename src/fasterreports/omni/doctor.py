@@ -250,12 +250,20 @@ def _check_vba(rep: CheckReport, settings) -> None:
 def _vba_hint(settings) -> str:
     flag = settings.excel.silent_mode_flag
     return (
-        f"Apri l'editor VBA (Alt+F11), modulo CreaMalpractice, e aggiungi:\n"
+        f"Via piu' rapida, senza aprire l'editor:\n"
+        f"    omni-report patch-template\n"
+        f"(serve la spunta 'Considera attendibile l'accesso al modello a oggetti\n"
+        f" dei progetti VBA' nel Centro protezione)\n"
+        f"\n"
+        f"Senza abilitare niente, genera il modulo da incollare:\n"
+        f"    python tools/make_vba_patch.py {Path(settings.template).name}\n"
+        f"\n"
+        f"A mano: Alt+F11, modulo CreaMalpractice, aggiungi\n"
         f"    Public {flag} As Boolean\n"
         f"    Public Sub Set{flag}(ByVal value As Boolean)\n"
         f"        {flag} = value\n"
         f"    End Sub\n"
-        f"poi metti i due MsgBox dietro `If Not {flag} Then ...`.\n"
+        f"e metti i due MsgBox dietro `If Not {flag} Then ...`.\n"
         f"Passo per passo: template/COME_PREPARARE_IL_TEMPLATE.md"
     )
 

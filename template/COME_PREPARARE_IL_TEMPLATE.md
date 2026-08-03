@@ -34,7 +34,27 @@ esecuzione, uno nel gestore d'errore. In automazione **bloccano il processo a
 tempo indeterminato**, in attesa di un clic che nessuno darà — e con Excel
 invisibile non si vede nemmeno il dialogo.
 
-### La via rapida: fatti generare il modulo già patchato
+### La via più rapida: lascia fare alla pipeline
+
+```bash
+omni-report patch-template
+```
+
+Apre il template, riscrive il modulo passando dall'**API di VBA** e salva. Non
+devi aprire l'editor. Fa una copia di sicurezza (`_prima_della_patch.xlsm`)
+prima di toccare qualcosa, ed è idempotente.
+
+Richiede una spunta, una volta sola:
+
+    File → Opzioni → Centro protezione → Impostazioni Centro protezione
+      → Impostazioni macro → "Considera attendibile l'accesso al modello
+        a oggetti dei progetti VBA"
+
+Passando dall'API invece che dal binario è VBA stesso a ricompilare, quindi il
+p-code resta coerente col sorgente: il rischio del "sembra patchato ma esegue il
+codice vecchio" non c'è.
+
+### La via che non richiede impostazioni: modulo già patchato da incollare
 
 ```bash
 pip install -e ".[audit]"
@@ -48,13 +68,19 @@ incolla il contenuto del file generato. Salva mantenendo il `.xlsm`.
 
 È idempotente: su un modulo già patchato non fa nulla.
 
-**Perché non modifica il file direttamente.** Il codice sta in
-`xl/vbaProject.bin`, un contenitore OLE dove i moduli sono compressi, e accanto
-al sorgente c'è il **p-code compilato**. Excel, quando le versioni combaciano,
-esegue il p-code e non il sorgente: riscrivendo solo il testo si otterrebbe un
-file che *sembra* patchato e continua a eseguire il codice vecchio. È un modo di
-fallire silenzioso, cioè esattamente il tipo di guasto che questo progetto
-elimina — meglio due minuti di copia-incolla verificabile.
+Genera due file: `_da_incollare.vb` (da incollare, senza la riga
+`Attribute VB_Name` che a mano darebbe errore di compilazione) e `.bas` (da
+importare). Hanno **codifiche diverse di proposito**: il modulo contiene
+caratteri non-ASCII originali — il grado nell'etichetta AHT e gli accenti dentro
+`NormKey` — e letti con la codifica sbagliata `NormKey` smette di normalizzare
+in silenzio, mandando a zero le ore previste.
+
+**Perché nessuno dei due modifica `xl/vbaProject.bin` a file chiuso.** I moduli
+sono compressi in un contenitore OLE e accanto al sorgente c'è il **p-code
+compilato**: quando le versioni combaciano Excel esegue quello, non il sorgente.
+Riscrivendo solo il testo si otterrebbe un file che *sembra* patchato e continua
+a eseguire il codice vecchio. Guasto silenzioso, cioè il tipo di cosa che questo
+progetto esiste per eliminare.
 
 ### La via manuale
 

@@ -64,6 +64,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="salta la prova di apertura di Excel (utile su una macchina senza Excel)",
     )
 
+    pt = sub.add_parser(
+        "patch-template",
+        help="applica la patch SilentMode al VBA del template, senza aprire l'editor",
+    )
+    pt.add_argument("--config", type=Path, help="cartella config (default: config/)")
+    pt.add_argument(
+        "--visible", action="store_true", help="mostra Excel durante l'operazione"
+    )
+    pt.add_argument(
+        "--no-backup", action="store_true",
+        help="non salvare una copia del template prima di modificarlo",
+    )
+
     return p
 
 
@@ -86,6 +99,24 @@ def main(argv: list[str] | None = None) -> int:
             report = run_checks(contract, settings, try_excel=not args.no_excel)
             print(report.render())
             return 0 if report.ok else 1
+
+        if args.command == "patch-template":
+            from .vbapatch import apply_via_xlwings
+
+            print(f"Template: {settings.template}")
+            done, backup = apply_via_xlwings(
+                settings.template,
+                flag=settings.excel.silent_mode_flag,
+                backup=not args.no_backup,
+                visible=args.visible,
+            )
+            if backup:
+                print(f"Copia di sicurezza: {backup.name}")
+            print("\nModifiche:")
+            for d in done:
+                print(f"  {'!' if d.startswith('ATTENZIONE') else '·'} {d}")
+            print("\nVerifica con:  omni-report check")
+            return 0
 
         if args.input:
             settings = _replace(settings, input_dir=args.input)

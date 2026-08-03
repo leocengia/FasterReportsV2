@@ -255,3 +255,39 @@ def test_il_patchato_soddisfa_il_check_del_doctor():
     ]
     assert not nudi
     assert "Err.Raise" in out
+
+
+# --- applicazione via xlwings (percorsi d'errore, senza Excel) --------------
+
+def test_apply_via_xlwings_template_assente(tmp_path):
+    from fasterreports.omni.vbapatch import PatchError, apply_via_xlwings
+
+    with pytest.raises(PatchError) as e:
+        apply_via_xlwings(tmp_path / "non_esiste.xlsm")
+    assert "non trovato" in str(e.value)
+
+
+def test_il_tool_riusa_la_logica_del_package():
+    """Una regola sola: il tool non duplica la patch, la importa."""
+    from fasterreports.omni import vbapatch
+    import make_vba_patch
+
+    assert make_vba_patch.patch is vbapatch.patch
+    assert make_vba_patch.verify is vbapatch.verify
+    assert make_vba_patch._write is vbapatch.write_encoded
+
+
+def test_suggerimento_del_doctor_cita_patch_template(contract):
+    """Chi legge l'errore deve trovare la via piu' rapida per primo."""
+    from dataclasses import replace
+
+    from fasterreports.omni.doctor import run_checks
+    from fasterreports.omni.settings import load_settings
+
+    if not SAMPLE.is_file():
+        pytest.skip("campione W30 assente")
+    settings = load_settings(ROOT / "config" / "settings.yml", root=ROOT)
+    rep = run_checks(contract, replace(settings, template=SAMPLE), try_excel=False)
+    hint = next(c for c in rep.checks if "SetSilentMode" in c.name).hint
+    assert "omni-report patch-template" in hint
+    assert "make_vba_patch" in hint

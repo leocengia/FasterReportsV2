@@ -435,3 +435,30 @@ def test_week_from_dates_non_e_la_settimana():
     grezzo = week_from_dates(at)
     assert (grezzo[1] - grezzo[0]).days == 7  # otto giorni: uno di troppo
     assert grezzo != week_from_iso(2026, 30)
+
+
+def test_infer_iso_week_prende_la_moda():
+    """La settimana viene dai dati: quella dove stanno per la gran parte.
+
+    Caso reale del W30: 26537 righe nella settimana 30 e 3 che sbordano nella
+    31. Il min/max darebbe otto giorni a cavallo di due settimane.
+    """
+    from fasterreports.core.wfmsource import infer_iso_week
+
+    valori = ["2026-07-20 06:00:00"] * 100 + ["2026-07-27 06:00:00"] * 3
+    assert infer_iso_week(valori) == (2026, 30)
+
+
+def test_infer_iso_week_applica_l_offset():
+    """19/07 16:00 Seattle + 9h = 20/07 Milano, cioe' settimana 30 e non 29."""
+    from fasterreports.core.wfmsource import infer_iso_week
+
+    valori = ["2026-07-19 16:00:00"] * 10
+    assert infer_iso_week(valori, offset_hours=0.0) == (2026, 29)
+    assert infer_iso_week(valori, offset_hours=9.0) == (2026, 30)
+
+
+def test_infer_iso_week_senza_date():
+    from fasterreports.core.wfmsource import infer_iso_week
+
+    assert infer_iso_week(["", None, "non una data"]) is None

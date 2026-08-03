@@ -34,7 +34,7 @@ src/fasterreports/
   omni/                Omni Report: writer, orchestrate, CLI (xlwings)
   wow/                 WOW AHT Trend (da fare)
 tools/                 audit dei workbook e golden test, senza aprire Excel
-tests/                 340 test, nessuno richiede Excel
+tests/                 346 test, nessuno richiede Excel
 docs/                  i due piani + architettura + audit del W30
 samples/               workbook e sorgenti di riferimento (W30)
 input/  output/        inbox delle fonti e prodotti (non versionati)
@@ -60,11 +60,16 @@ i 4 CSV (`AT.csv`, `ATwi.csv`, `SF.csv`, `PSAT.csv`) piu' `Turni.xlsx` e
 le sorgenti WFM possono coprire mesi: la settimana viene ritagliata da sola,
 ricavandola dalle date di `AT_DATASET`.
 
-`--week` non serve solo a nominare il file: e' la **settimana ISO** da cui si
-ricavano i sette giorni su cui ritagliare `Turni` e `Slot Only Cases`. Verificato
-sul W30: ISO week 30 del 2026 = 20-26 luglio, esattamente i giorni del workbook.
-Non si ricava dall'intervallo dei dati, che sborda — l'export di AT e' per data
-Seattle e `Data Milano` lo sposta di 9 ore.
+Le sorgenti WFM contengono molti piu' giorni e molte piu' persone del necessario
+(il roster del W30 copre due mesi e 130 agenti): vengono **ritagliate alla
+settimana di `AT_DATASET`**, che e' quella in cui i suoi dati stanno per la gran
+parte. Il numero passato a `--week` non la decide, la **controlla**: se non
+coincide con quella dei dati il preflight blocca e dice quale usare, cosi' non si
+producono i numeri di una settimana con il nome di un'altra.
+
+Non si usa il min/max delle date: l'export di AT e' per data Seattle e
+`Data Milano` lo sposta di 9 ore, quindi nel W30 sborda al 27 luglio — otto
+giorni invece di sette.
 
 `--only` ricarica un sottoinsieme, per quando i turni cambiano in corsa:
 
@@ -136,7 +141,7 @@ che il piano non aveva** (`docs/audit-workbook-W30.md`).
 ## Test
 
 ```bash
-python -m pytest            # 340 test, <2 s, nessuna dipendenza da Excel
+python -m pytest            # 346 test, <2 s, nessuna dipendenza da Excel
 ```
 
 Fra questi, i tre scenari del piano §11: colonne mescolate e rinominate negli

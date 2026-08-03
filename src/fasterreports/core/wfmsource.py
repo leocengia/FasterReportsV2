@@ -621,6 +621,38 @@ def week_from_iso(year: int, week: int) -> tuple[date, date]:
     return monday, monday + timedelta(days=6)
 
 
+def infer_iso_week(values, offset_hours: float = 0.0) -> tuple[int, int] | None:
+    """La settimana ISO in cui i dati stanno **per la gran parte**.
+
+    È così che si determina la settimana da ritagliare: dai dati, non dal
+    numero che l'utente digita — che resta come controcanto per accorgersi di un
+    errore di battitura.
+
+    Perché la moda e non il min/max: l'export di `AT_DATASET` è per data
+    Seattle, e `Data Milano` = `INT(Start Time + offset/24)` lo sposta avanti.
+    Nel W30 le date Milano vanno dal 20 al 27 luglio — otto giorni, a cavallo di
+    due settimane ISO — mentre il workbook copre i sette dal 20 al 26. La moda
+    dà la 30, il min/max darebbe un giorno in più.
+
+    `offset_hours` è l'offset fuso (`Helper Malpractice`!B7 = 9): senza, un
+    turno serale di Seattle cadrebbe nel giorno sbagliato.
+    """
+    from collections import Counter
+    from datetime import timedelta
+
+    weeks: Counter[tuple[int, int]] = Counter()
+    for v in values:
+        d = _as_datetime(v)
+        if d is None:
+            continue
+        milano = d + timedelta(hours=offset_hours)
+        iso = milano.isocalendar()
+        weeks[(iso[0], iso[1])] += 1
+    if not weeks:
+        return None
+    return weeks.most_common(1)[0][0]
+
+
 def infer_year(values) -> int | None:
     """Anno prevalente fra le date passate.
 

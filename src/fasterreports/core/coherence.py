@@ -87,6 +87,8 @@ def check_sources(
     aliases_available: bool = True,
     at_start_times: list | None = None,
     timezone_offset_hours: float = 0.0,
+    week_declared: int | None = None,
+    week_inferred: tuple[int, int] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -118,6 +120,8 @@ def check_sources(
         _check_stale_cache(rep, backoffice_notes, "back office")
         _check_requests(rep, backoffice_notes)
 
+    if week_inferred is not None:
+        _check_week_declared(rep, week_declared, week_inferred)
     if at_start_times is not None and week is not None:
         _check_at_in_week(rep, at_start_times, week, timezone_offset_hours)
 
@@ -260,6 +264,49 @@ def _check_requests(rep, notes) -> None:
 
 
 # --- la settimana e' quella giusta? ---------------------------------------
+
+def _check_week_declared(rep, declared, inferred) -> None:
+    """La settimana dichiarata a `--week` coincide con quella dei dati?
+
+    La settimana la decidono i dati: si prende quella in cui `AT_DATASET` sta
+    per la gran parte. Il numero digitato serve da controcanto — se non
+    coincide, uno dei due e' sbagliato e vale la pena fermarsi: un report
+    prodotto sulla settimana giusta ma archiviato col nome di un'altra e' un
+    problema che si scopre mesi dopo.
+    """
+    year, week = inferred
+    if declared is None:
+        rep.add(Finding(
+            check="settimana dedotta dai dati",
+            level=SEGNALA,
+            summary=f"settimana ISO {week} del {year}",
+        ))
+        return
+    if declared == week:
+        rep.add(Finding(
+            check="settimana dedotta dai dati",
+            level=SEGNALA,
+            summary=f"settimana ISO {week} del {year}, coincide con --week {declared}",
+        ))
+        return
+    rep.add(Finding(
+        check="settimana dichiarata",
+        level=BLOCCA,
+        summary=(
+            f"hai indicato --week {declared} ma i dati stanno nella settimana "
+            f"ISO {week} del {year}"
+        ),
+        hint=(
+            f"Uno dei due e' sbagliato. Se i dati sono giusti, rilancia con\n"
+            f"  --week {week}\n"
+            f"Se invece volevi davvero la {declared}, l'export non e' quello.\n"
+            f"La settimana usata per ritagliare turni e slot e' sempre quella dei\n"
+            f"dati, mai quella digitata: cosi' non si producono numeri di una\n"
+            f"settimana con il nome di un'altra."
+        ),
+    ))
+
+
 
 def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
     """Quanta attivita' di `AT_DATASET` cade nella settimana scelta.

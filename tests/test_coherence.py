@@ -331,3 +331,25 @@ def test_offset_fuso_conta():
     senza = check_sources(at_start_times=times, week=W30, timezone_offset_hours=0.0)
     assert _finding(con, "settimana scelta").level == SEGNALA
     assert _finding(senza, "settimana scelta").level == BLOCCA
+
+
+def test_settimana_dichiarata_coincide():
+    rep = check_sources(week_declared=30, week_inferred=(2026, 30))
+    f = _finding(rep, "settimana dedotta")
+    assert f.level == SEGNALA and "coincide" in f.summary
+    assert rep.ok
+
+
+def test_settimana_dichiarata_diversa_blocca():
+    """Numeri giusti col nome di un'altra settimana: problema che si scopre mesi dopo."""
+    rep = check_sources(week_declared=29, week_inferred=(2026, 30))
+    f = _finding(rep, "settimana dichiarata")
+    assert f.level == BLOCCA
+    assert "--week 30" in f.hint  # dice quale usare
+    assert not rep.ok
+
+
+def test_settimana_senza_dichiarazione_solo_informa():
+    rep = check_sources(week_inferred=(2026, 30))
+    f = _finding(rep, "settimana dedotta")
+    assert f.level == SEGNALA and "30" in f.summary

@@ -28,6 +28,7 @@ from ..core.csvsource import read_csv
 from ..core.errors import PipelineError
 from ..core.preflight import PreflightReport, check_dataset
 from ..core.transform import Block, add_derived, build_block
+from ..core.wfmsource import week_from_iso
 from .settings import Settings
 from .writer import WriteResult, write_block
 
@@ -179,8 +180,14 @@ def run_preflight(
             # `_resolve_week`).
             if name == "AT_DATASET":
                 ctx["at_start_times"] = _at_start_times(dataset, block)
-                if "week" not in ctx:
-                    ctx["week"] = _resolve_week(ctx["at_start_times"], week_number)
+                ctx["offset_hours"] = _timezone_offset(contract, settings)
+                inferred = _resolve_week(
+                    ctx["at_start_times"], ctx["offset_hours"]
+                )
+                ctx["week_inferred"] = inferred
+                ctx["week_declared"] = week_number
+                if "week" not in ctx and inferred:
+                    ctx["week"] = week_from_iso(*inferred)
 
     report.coherence = _run_coherence(contract, settings, report, blocks, ctx)
     return report, blocks
@@ -197,30 +204,27 @@ def _at_start_times(dataset, block) -> list:
     return [row[off] for row in block.rows if off < len(row) and row[off] is not None]
 
 
-def _resolve_week(start_times: list, week_number: int | None):
-    """La settimana su cui ritagliare `Turni` e `Slot Only Cases`.
+def _resolve_week(start_times: list, offset_hours: float):
+    """La settimana ISO su cui ritagliare `Turni` e `Slot Only Cases`.
 
-    Si usa il numero di settimana ISO passato a `--week` piu' l'anno prevalente
-    nei dati, **non** il min/max di `AT_DATASET`.
+    Si ricava **dai dati**: la settimana in cui `AT_DATASET` sta per la gran
+    parte. Il numero passato a `--week` non la determina, la controlla — se i
+    due non coincidono, il preflight blocca (vedi il controllo "settimana
+    dichiarata").
 
-    Il motivo e' misurato: l'export di AT e' per data Seattle, e `Data Milano` =
-    `INT(Start Time + 9/24)` lo sposta in avanti. Nel W30 le date Milano vanno
-    dal 20 al **27** luglio — otto giorni — mentre `Turni` e `Slot Only Cases`
-    del workbook coprono i sette dal 20 al 26. Prendendo il min/max si
-    caricherebbe un giorno in piu' di turni e slot, e il report conterrebbe dati
-    fuori settimana.
+    Le sorgenti WFM contengono molti piu' giorni e molte piu' persone del
+    necessario (il roster del W30 copre due mesi e 130 agenti): il ritaglio alla
+    settimana di AT_DATASET e' quello che le riduce a cio' che serve.
 
-    Verificato: ISO week 30 del 2026 = 20–26 luglio, esattamente i sette giorni
-    del workbook.
+    NON si usa il min/max delle date, ed e' misurato: l'export di AT e' per data
+    Seattle e `Data Milano` = `INT(Start Time + offset/24)` lo sposta avanti. Nel
+    W30 le date Milano vanno dal 20 al **27** luglio — otto giorni, a cavallo di
+    due settimane ISO — mentre il workbook copre i sette dal 20 al 26. Col
+    min/max si caricherebbe un giorno in piu' di turni e slot.
     """
-    from ..core.wfmsource import infer_year, week_from_iso
+    from ..core.wfmsource import infer_iso_week
 
-    if week_number is None:
-        return None
-    year = infer_year(start_times)
-    if year is None:
-        return None
-    return week_from_iso(year, week_number)
+    return infer_iso_week(start_times, offset_hours)
 
 
 def _run_coherence(contract, settings, report, blocks, ctx):
@@ -243,7 +247,9 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         at_dates=ctx.get("week"),
         week=ctx.get("week"),
         at_start_times=ctx.get("at_start_times"),
-        timezone_offset_hours=_timezone_offset(contract, settings),
+        timezone_offset_hours=ctx.get("offset_hours", 0.0),
+        week_declared=ctx.get("week_declared"),
+        week_inferred=ctx.get("week_inferred"),
         email_agenti=email,
         contratti=settings.contratti,
         wanted_skills=settings.sources.skills,

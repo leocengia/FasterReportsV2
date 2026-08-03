@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from ..core.errors import ContractError
+from ..core.errors import ContractError, SourceError
 
 
 @dataclass(frozen=True)
@@ -59,13 +59,60 @@ class Settings:
         return self.output_dir / self.preflight_name.format(week=week)
 
     def input_path(self, dataset: str) -> Path:
+        """Il file della sorgente, trovato per **pattern** e non per nome esatto.
+
+        Gli export reali si chiamano `AT DATASET W31.xlsx`, `SF DATABASE W31.csv`:
+        il numero di settimana e' nel nome e cambia ogni volta, e l'estensione
+        dipende da chi produce l'export. Pretendere `AT.csv` costringerebbe a
+        rinominare quattro file a mano ogni settimana — cioe' a reintrodurre
+        proprio il passaggio manuale che si vuole togliere.
+
+        Il pattern deve corrispondere a **un solo** file: zero o molti sono
+        entrambi errori, e si dice quali file c'erano.
+        """
         try:
-            return self.input_dir / self.input_files[dataset]
+            pattern = self.input_files[dataset]
         except KeyError:
             raise ContractError(
-                f"settings.yml: manca il nome file per il dataset {dataset!r} "
+                f"settings.yml: manca il pattern per il dataset {dataset!r} "
                 f"in input_files. Presenti: {', '.join(sorted(self.input_files))}"
             ) from None
+
+        # Un pattern senza caratteri jolly resta un nome esatto: comodo per
+        # chi preferisce nomi fissi.
+        if not any(ch in pattern for ch in "*?["):
+            return self.input_dir / pattern
+
+        if not self.input_dir.is_dir():
+            raise SourceError(
+                f"Cartella delle sorgenti inesistente: {self.input_dir}"
+            )
+        trovati = sorted(
+            p for p in self.input_dir.glob(pattern)
+            if p.is_file() and not p.name.startswith("~$")
+        )
+        if len(trovati) == 1:
+            return trovati[0]
+
+        presenti = sorted(
+            p.name for p in self.input_dir.iterdir()
+            if p.is_file() and p.name != ".gitkeep"
+        )
+        if not trovati:
+            raise SourceError(
+                f"{dataset}: nessun file corrisponde a {pattern!r} in "
+                f"{self.input_dir}.\n"
+                f"  File presenti: "
+                f"{', '.join(repr(n) for n in presenti) if presenti else '(nessuno)'}\n"
+                f"  Il pattern si cambia in config/settings.yml -> input_files."
+            )
+        raise SourceError(
+            f"{dataset}: {len(trovati)} file corrispondono a {pattern!r}, "
+            f"non so quale usare.\n"
+            f"  {', '.join(repr(p.name) for p in trovati)}\n"
+            f"  Togli dalla cartella quelli della settimana vecchia, oppure "
+            f"restringi il pattern."
+        )
 
 
 def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:

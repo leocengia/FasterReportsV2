@@ -23,64 +23,7 @@ from fasterreports.core.wfmsource import (
     week_from_dates,
 )
 from fasterreports.core.xlsxsource import Sheet, col_to_index, read_sheet
-
-# ---------------------------------------------------------------------------
-# Costruzione di un .xlsx minimo (solo ciò che serve al nostro lettore)
-# ---------------------------------------------------------------------------
-
-_CT = """<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="xml" ContentType="application/xml"/>
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
-</Types>"""
-_RELS = """<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>"""
-_WBRELS = """<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-</Relationships>"""
-
-
-def _esc(s: str) -> str:
-    return (
-        str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-
-
-def make_xlsx(path: Path, sheet_name: str, grid: dict[str, object]) -> Path:
-    """`grid`: {"A1": valore}. Numeri come numeri, testo come inlineStr."""
-    rows: dict[int, list[str]] = {}
-    for ref, val in grid.items():
-        col = "".join(c for c in ref if c.isalpha())
-        num = int("".join(c for c in ref if c.isdigit()))
-        if isinstance(val, (int, float)) and not isinstance(val, bool):
-            cell = f'<c r="{ref}"><v>{val}</v></c>'
-        else:
-            cell = f'<c r="{ref}" t="inlineStr"><is><t>{_esc(val)}</t></is></c>'
-        rows.setdefault(num, []).append((col, cell))
-    body = ""
-    for num in sorted(rows):
-        cells = "".join(c for _, c in sorted(rows[num], key=lambda kv: col_to_index(kv[0])))
-        body += f'<row r="{num}">{cells}</row>'
-    sheet = (
-        '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/'
-        f'spreadsheetml/2006/main"><sheetData>{body}</sheetData></worksheet>'
-    )
-    wb = (
-        '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/'
-        'spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/'
-        'officeDocument/2006/relationships"><sheets>'
-        f'<sheet name="{_esc(sheet_name)}" sheetId="1" r:id="rId1"/></sheets></workbook>'
-    )
-    with zipfile.ZipFile(path, "w") as z:
-        z.writestr("[Content_Types].xml", _CT)
-        z.writestr("_rels/.rels", _RELS)
-        z.writestr("xl/workbook.xml", wb)
-        z.writestr("xl/_rels/workbook.xml.rels", _WBRELS)
-        z.writestr("xl/worksheets/sheet1.xml", sheet)
-    return path
+from xlsxbuild import make_xlsx
 
 
 def roster_grid(dates=("20/07/2026", "21/07/2026"), agents=None, start_col="A"):

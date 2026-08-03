@@ -181,6 +181,16 @@ def read_sheet_names(path: str | Path) -> list[str]:
     path = Path(path)
     if not path.is_file():
         raise SourceError(f"File sorgente non trovato: {path}")
-    with zipfile.ZipFile(path) as z:
-        wb = z.read("xl/workbook.xml").decode("utf8", "replace")
+    try:
+        with zipfile.ZipFile(path) as z:
+            wb = z.read("xl/workbook.xml").decode("utf8", "replace")
+    except zipfile.BadZipFile:
+        # Stesso messaggio di read_sheet: un .xls vecchio formato, un file
+        # troncato o un CSV rinominato finiscono qui, e chi legge deve capire
+        # che il problema e' il file, non il foglio.
+        raise SourceError(
+            f"{path.name}: non è un file .xlsx valido (l'archivio non si apre)."
+        ) from None
+    except KeyError:
+        raise SourceError(f"{path.name}: struttura .xlsx inattesa.") from None
     return [_unescape(m) for m in re.findall(r'<sheet name="([^"]*)"', wb)]

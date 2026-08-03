@@ -10,17 +10,27 @@ paths:
   output: output
   template: template/Omni_Report_TEMPLATE.xlsm
 
-# Nome dei file attesi in input/ per ciascun dataset.
-# I primi quattro sono CSV; gli ultimi due sono .xlsx in forma di matrice larga
-# (un agente per riga, una colonna per giorno) e passano dagli adattatori di
-# core/wfmsource.py. Quale lettore usare sta in columns.yml (`reader:`).
+# Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
+# reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di
+# settimana e' nel nome e cambia ogni volta, e l'estensione dipende da chi
+# produce l'export. Pretendere nomi fissi vorrebbe dire rinominare quattro file
+# a mano ogni settimana, cioe' rimettere il passaggio manuale che si vuole
+# togliere.
+#
+# Il FORMATO non si dichiara: si riconosce dall'estensione. `.csv`/`.txt` passano
+# da csvsource, `.xlsx`/`.xlsm` da tablesource (dataset tabellari) o dagli
+# adattatori WFM (matrici larghe). Cosa sia il file lo dice `reader:` in
+# columns.yml.
+#
+# Ogni pattern deve corrispondere a UN SOLO file: zero o molti sono entrambi
+# errori parlanti. Un pattern senza caratteri jolly resta un nome esatto.
 input_files:
-  AT_DATASET: AT.csv
-  ATwi_DATASET: ATwi.csv
-  SF_DATABASE: SF.csv
-  PSAT_DATASET: PSAT.csv
-  Turni: Turni.xlsx
-  Slot Only Cases: Back_Office_Time.xlsx
+  AT_DATASET: "AT DATASET*"
+  ATwi_DATASET: "ATwi DATASET*"
+  SF_DATABASE: "SF DATABASE*"
+  PSAT_DATASET: "PSAT DATASET*"
+  Turni: "Turni*"
+  Slot Only Cases: "Back*Office*"
 
 sources:
   # Skill che entrano nel report. Confronto per UGUAGLIANZA ESATTA, come il

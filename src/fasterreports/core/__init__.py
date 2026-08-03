@@ -22,6 +22,7 @@ from .matcher import DatasetMapping, Resolution, resolve_dataset, resolve_field
 from .names import full_name, normalize_name, normalize_skill
 from .preflight import DatasetReport, PreflightReport, check_dataset
 from .shifts import Shift, ShiftParseError, Slot, parse_shift, parse_slot
+from .tablesource import TableSource, is_excel, read_table
 from .transform import Block, add_derived, build_block
 from .wfmsource import (
     SourceNotes,
@@ -59,6 +60,7 @@ __all__ = [
     "Slot",
     "SourceError",
     "SourceNotes",
+    "TableSource",
     "TidySource",
     "add_derived",
     "build_block",
@@ -77,7 +79,9 @@ __all__ = [
     "read_csv_text",
     "read_roster",
     "read_sheet",
+    "read_table",
     "read_sheet_names",
+    "is_excel",
     "resolve_dataset",
     "resolve_field",
     "week_bounds",

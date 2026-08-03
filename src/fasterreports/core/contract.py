@@ -114,7 +114,9 @@ class Contract:
 _VALID_DTYPES = {"str", "float", "int", "datetime"}
 _VALID_ROLES = {"input", "derived"}
 _VALID_MATCH = {"exact_first", "exact"}
-_VALID_READERS = {"csv", "wfm_roster", "wfm_backoffice"}
+# `csv` e `table` sono sinonimi: un dataset tabellare, che arrivi come CSV o
+# come foglio Excel. Il formato lo decide l'estensione del file, non questo.
+_VALID_READERS = {"csv", "table", "wfm_roster", "wfm_backoffice"}
 
 
 def load_contract(path: str | Path) -> Contract:

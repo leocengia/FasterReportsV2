@@ -54,7 +54,16 @@ def _open_source(contract: Contract, settings: Settings, dataset, ctx: dict):
     entrambi restituiscono `(headers, rows)`.
     """
     path = settings.input_path(dataset.name)
-    if dataset.reader == "csv":
+
+    # Il formato si riconosce dall'estensione, non si dichiara: gli export reali
+    # sono misti (SF e PSAT come .csv, AT e ATwi come .xlsx) e dipendono da chi
+    # li produce. `reader:` nel contratto dice cosa *e'* il file — una tabella o
+    # una matrice larga — non come e' scritto.
+    if dataset.reader in ("csv", "table"):
+        from ..core.tablesource import is_excel, read_table
+
+        if is_excel(path):
+            return read_table(path)
         return read_csv(path)
 
     from ..core.wfmsource import read_backoffice, read_roster

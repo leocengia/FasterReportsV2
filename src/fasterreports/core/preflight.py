@@ -42,6 +42,12 @@ class PreflightReport:
     datasets: list[DatasetReport] = field(default_factory=list)
     generated_at: str = ""
     coherence: object | None = None
+    # La settimana ricavata dai dati e i sette giorni che copre. Va scritta
+    # sempre, anche quando le fonti WFM mancano e la sezione coerenza non gira:
+    # e' il numero su cui si ritagliano turni e slot, e chi legge il rapporto
+    # deve poterlo confrontare con quello che si aspettava.
+    week: tuple[int, int] | None = None
+    week_bounds: tuple[object, object] | None = None
 
     @property
     def ok(self) -> bool:
@@ -62,6 +68,13 @@ class PreflightReport:
         lines.append("PREFLIGHT — mappatura colonne CSV -> workbook")
         lines.append(f"Generato: {stamp}")
         lines.append(f"Esito complessivo: {'OK' if self.ok else 'BLOCCATO'}")
+        if self.week:
+            anno, num = self.week
+            riga = f"Settimana dai dati: W{num:02d} {anno}"
+            if self.week_bounds:
+                lo, hi = self.week_bounds
+                riga += f" ({_dmy(lo)} → {_dmy(hi)}, 7 giorni)"
+            lines.append(riga)
         lines.append("=" * 78)
 
         for d in self.datasets:
@@ -132,6 +145,11 @@ class PreflightReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.render(), encoding="utf-8")
         return path
+
+
+def _dmy(d) -> str:
+    """Data in giorno/mese/anno: e' come la legge chi usa il report."""
+    return d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else str(d)
 
 
 def _render_notes(notes) -> list[str]:

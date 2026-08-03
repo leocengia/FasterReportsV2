@@ -54,11 +54,20 @@ omni-report preflight --week 31               # valida le fonti, NON apre Excel
 omni-report build --week 31                   # il "pulsante"
 ```
 
-Le sei fonti vanno in `input/` con i nomi indicati in `config/settings.yml`:
-i 4 CSV (`AT.csv`, `ATwi.csv`, `SF.csv`, `PSAT.csv`) piu' `Turni.xlsx` e
-`Back_Office_Time.xlsx`. L'ordine delle colonne dentro i file **non conta**, e
-le sorgenti WFM possono coprire mesi: la settimana viene ritagliata da sola,
-ricavandola dalle date di `AT_DATASET`.
+Le sei fonti vanno in `input/` **cosi' come le scarichi**, senza rinominarle: i
+nomi si riconoscono per pattern (`config/settings.yml` -> `input_files`), quindi
+`AT DATASET W31.xlsx` va bene com'e'. Nemmeno il formato va dichiarato: `.csv` e
+`.xlsx` passano dal lettore giusto in base all'estensione, perche' gli export
+reali sono misti (SF e PSAT come CSV, AT e ATwi come fogli Excel).
+
+Ogni pattern deve corrispondere a **un solo** file. Due settimane nella stessa
+cartella bloccano dicendo quali file ha trovato: scegliere "il piu' recente"
+darebbe il risultato giusto per caso, e sbagliato in silenzio la volta che il
+timestamp inganna.
+
+L'ordine delle colonne dentro i file **non conta**, e le sorgenti WFM possono
+coprire mesi: la settimana viene ritagliata da sola, ricavandola dalle date di
+`AT_DATASET`.
 
 Le sorgenti WFM contengono molti piu' giorni e molte piu' persone del necessario
 (il roster del W30 copre due mesi e 130 agenti): vengono **ritagliate alla

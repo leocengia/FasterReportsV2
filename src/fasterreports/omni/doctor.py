@@ -323,21 +323,39 @@ def _check_email_agenti(rep: CheckReport, settings) -> None:
 
 
 def _check_input_dir(rep: CheckReport, settings, contract) -> None:
-    missing = []
-    found = []
+    """Quali delle sei fonti sono in cartella, e per quelle che non ci sono, perche'.
+
+    Le tre ragioni non si equivalgono e non vanno confuse: il pattern non
+    configurato si sistema in settings.yml, il file assente copiandolo, due file
+    corrispondenti togliendo la settimana vecchia. Prima erano tutte
+    "nome file non configurato", che manda a cercare nel posto sbagliato.
+    """
+    from ..core.errors import ContractError, PipelineError
+
+    found: list[str] = []
+    missing: list[str] = []
     for name in contract.datasets:
+        pattern = settings.input_files.get(name)
         try:
             path = settings.input_path(name)
-        except Exception:
-            missing.append(f"{name} (nome file non configurato)")
+        except ContractError:
+            missing.append(f"{name} (pattern non in settings.yml)")
             continue
-        (found if path.is_file() else missing).append(path.name)
+        except PipelineError as exc:
+            quanti = "piu' di un file" if "corrispondono" in str(exc) else "nessun file"
+            missing.append(f"{name} ({quanti} per {pattern!r})")
+            continue
+        if path.is_file():
+            found.append(path.name)
+        else:
+            missing.append(f"{name} ({path.name} assente)")
+
     if missing:
         rep.add(
             "fonti in input/", ATTENZIONE,
             f"{len(found)}/{len(contract.datasets)} presenti; mancano: {', '.join(missing)}",
             "Non blocca il check: le fonti si mettono al momento del run.\n"
-            "I nomi attesi sono in config/settings.yml -> input_files.",
+            "I pattern dei nomi sono in config/settings.yml -> input_files.",
         )
     else:
         rep.add("fonti in input/", OK, f"tutte e {len(found)}")

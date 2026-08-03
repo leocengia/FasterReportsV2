@@ -115,11 +115,37 @@ def test_fonti_mancanti_non_bloccano(contract, settings, tmp_path):
 
 
 def test_fonti_presenti_ok(contract, settings, tmp_path):
-    for nome in settings.input_files.values():
+    """Con i nomi degli export **veri**, quelli che portano la settimana dentro."""
+    for nome in (
+        "AT DATASET W31.xlsx",
+        "ATwi DATASET W31.xlsx",
+        "SF DATABASE W31.csv",
+        "PSAT DATASET W31.csv",
+        "Turni_W31.xlsx",
+        "Back_Office_Time_Final.xlsx",
+    ):
         (tmp_path / nome).write_text("x", encoding="utf-8")
     s = replace(settings, input_dir=tmp_path, template=tmp_path / "assente.xlsm")
     rep = run_checks(contract, s, try_excel=False)
-    assert _check(rep, "fonti in input").status == OK
+    c = _check(rep, "fonti in input")
+    assert c.status == OK, c.detail
+
+
+def test_fonti_i_tre_motivi_non_si_confondono(contract, settings, tmp_path):
+    """Fonte assente, pattern non configurato e pattern ambiguo si sistemano in
+    tre posti diversi: il messaggio deve dire quale dei tre e'."""
+    (tmp_path / "AT DATASET W30.xlsx").write_text("x", encoding="utf-8")
+    (tmp_path / "AT DATASET W31.xlsx").write_text("x", encoding="utf-8")
+    files = dict(settings.input_files)
+    files.pop("Turni")
+    s = replace(
+        settings, input_dir=tmp_path, input_files=files,
+        template=tmp_path / "assente.xlsm",
+    )
+    detail = _check(run_checks(contract, s, try_excel=False), "fonti in input").detail
+    assert "AT_DATASET (piu' di un file" in detail       # settimana vecchia rimasta
+    assert "Turni (pattern non in settings.yml)" in detail
+    assert "SF_DATABASE (nessun file" in detail          # semplicemente non c'e'
 
 
 # --- report ----------------------------------------------------------------

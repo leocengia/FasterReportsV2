@@ -119,6 +119,24 @@ def _dataset_order(contract: Contract) -> list:
     )
 
 
+def _source_label(settings: Settings, dataset: str) -> str:
+    """Da dove *doveva* arrivare il dataset, senza poter fallire.
+
+    Serve nel ramo d'errore: se la sorgente manca, `input_path` solleva — ed e'
+    giusto che lo faccia. Ma chiamarla proprio mentre si scrive il rapporto
+    dell'errore faceva morire tutto il preflight sulla prima fonte assente,
+    invece di elencare le sei righe e dire quali mancano. Il rapporto deve
+    sopravvivere al guasto che sta descrivendo.
+    """
+    try:
+        return str(settings.input_path(dataset))
+    except PipelineError:
+        pattern = settings.input_files.get(dataset)
+        if pattern:
+            return f"{settings.input_dir / pattern} (nessun file corrispondente)"
+        return f"{settings.input_dir} (pattern non configurato)"
+
+
 def run_preflight(
     contract: Contract,
     settings: Settings,
@@ -160,7 +178,7 @@ def run_preflight(
             from ..core.preflight import DatasetReport
 
             report.datasets.append(
-                DatasetReport(name=name, source=str(settings.input_path(name)), error=str(exc))
+                DatasetReport(name=name, source=_source_label(settings, name), error=str(exc))
             )
             continue
 
@@ -197,6 +215,11 @@ def run_preflight(
                 ctx["week_declared"] = week_number
                 if "week" not in ctx and inferred:
                     ctx["week"] = week_from_iso(*inferred)
+
+    # Nel rapporto, sempre: e' la settimana su cui verranno ritagliati turni e
+    # slot, e va vista anche quando le fonti WFM mancano.
+    report.week = ctx.get("week_inferred")
+    report.week_bounds = ctx.get("week")
 
     report.coherence = _run_coherence(contract, settings, report, blocks, ctx)
     return report, blocks
@@ -241,9 +264,13 @@ def _run_coherence(contract, settings, report, blocks, ctx):
 
     turni = blocks.get("Turni")
     slot = blocks.get("Slot Only Cases")
-    if not (ctx.get("roster_notes") or turni or slot):
-        return None
-
+    # Gira SEMPRE, anche senza le fonti WFM. Ogni singolo controllo e' gia'
+    # guardato dai propri dati, quindi quelli che non hanno di che lavorare si
+    # saltano da se'. Uscire prima faceva perdere il confronto fra la settimana
+    # dichiarata a --week e quella che dicono i dati: con `--week 30` su un
+    # export della W31 il preflight rispondeva OK, e sarebbe uscito un
+    # `Omni_Report_W30.xlsm` pieno di W31. Un report con l'etichetta sbagliata e'
+    # peggio di un report che manca, perche' viene archiviato.
     email = None
     if settings.template.is_file():
         email = _read_email_agenti(settings.template)

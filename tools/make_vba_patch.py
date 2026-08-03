@@ -37,16 +37,20 @@ DEFAULT_MODULE = "CreaMalpractice"
 DEFAULT_FLAG = "SilentMode"
 
 # La dichiarazione va dopo Option Explicit, prima di qualunque altra cosa.
+# Solo ASCII, come il resto del modulo (l'autore scrive "verita'" invece di
+# "verita" accentata): il file passa dalla clipboard e da editor di testo, e un
+# carattere non-ASCII e' un problema di codifica in attesa di accadere.
 _DECL = """
 ' ==== Modalita' silenziosa, per l'esecuzione automatica ====
 ' In automazione un MsgBox blocca il processo a tempo indeterminato, in attesa
-' di un clic che nessuno dara' — e con Excel invisibile il dialogo non si vede
-' nemmeno. La pipeline chiama Set{flag}(True) prima della macro.
+' di un clic che nessuno dara', e con Excel invisibile il dialogo non si vede
+' nemmeno. La pipeline chiama Set{flag}(True) prima di lanciare la macro.
 Public {flag} As Boolean
 
 Public Sub Set{flag}(ByVal value As Boolean)
     {flag} = value
 End Sub
+
 """
 
 
@@ -233,21 +237,91 @@ def main(argv: list[str] | None = None) -> int:
         print("\nNon scrivo il file: andrebbe sistemato a mano.")
         return 1
 
-    out = args.output or args.workbook.with_name(f"{args.module}_patched.bas")
-    # CRLF: e' quello che l'editor VBA si aspetta.
-    out.write_text(patched.replace("\n", "\r\n"), encoding="utf-8")
-    print(f"\nScritto: {out}")
+    base = args.output or args.workbook.with_name(f"{args.module}_patched")
+    base = base.with_suffix("")
+
+    # Due file, perche' i due modi di applicarlo vogliono contenuti diversi.
+    #
+    # `Attribute VB_Name = "..."` e' valido solo in un file esportato: incollarlo
+    # nel corpo di un modulo dall'editor da' un errore di compilazione. Chi fa
+    # Ctrl+A e incolla — cioe' quasi tutti — ci sbatte contro.
+    for_import = base.with_suffix(".bas")
+    enc_import = _write(for_import, patched, for_import_route=True)
+
+    for_paste = base.with_name(base.name + "_da_incollare").with_suffix(".vb")
+    body = "\n".join(
+        l for l in patched.splitlines() if not l.strip().startswith("Attribute VB_")
+    ).lstrip("\n")
+    enc_paste = _write(for_paste, body, for_import_route=False)
+
+    n_special = sum(1 for ch in patched if ord(ch) > 127)
+    print(f"\nScritti due file, uno per ciascun modo di applicarlo:")
+    print(f"  {for_paste.name}")
+    print(f"      da INCOLLARE (senza la riga Attribute) · {enc_paste}")
+    print(f"  {for_import.name}")
+    print(f"      da IMPORTARE (modulo completo) · {enc_import}")
+    if n_special:
+        print(
+            f"\n  Nota: il modulo contiene {n_special} caratteri non-ASCII "
+            f"ORIGINALI (il grado\n"
+            f"  nell'etichetta AHT e gli accenti dentro NormKey). Per questo i due\n"
+            f"  file hanno codifiche diverse: letti male, NormKey smetterebbe di\n"
+            f"  normalizzare gli accenti in silenzio. Dopo aver incollato,\n"
+            f"  controlla che in NormKey si leggano ancora le vocali accentate."
+        )
     print(
-        "\nCome applicarlo (Alt+F11 nell'editor VBA):\n"
+        f"\nVia consigliata — incollare (Alt+F11 nell'editor VBA):\n"
         f"  1. apri il modulo {args.module}\n"
-        "  2. Ctrl+A, poi incolla il contenuto del file generato\n"
-        "  3. salva MANTENENDO il formato .xlsm\n"
-        "  4. verifica con:  omni-report check\n"
-        "\nIn alternativa: click destro sul modulo -> Remove, poi File -> Import\n"
-        "File. Incollare sopra e' piu' sicuro: se qualcosa va storto il modulo\n"
-        "originale e' ancora li'."
+        f"  2. Ctrl+A per selezionare tutto\n"
+        f"  3. incolla il contenuto di {for_paste.name}\n"
+        f"  4. salva MANTENENDO il formato .xlsm\n"
+        f"  5. verifica con:  omni-report check\n"
+        f"\nVia alternativa — importare: click destro sul modulo -> Remove (alla\n"
+        f"domanda 'esportare prima?' rispondi No), poi File -> Import File e\n"
+        f"scegli {for_import.name}.\n"
+        f"\nIncollare e' piu' sicuro: non si rimuove niente, e se qualcosa va\n"
+        f"storto basta annullare."
     )
     return 0
+
+
+def _write(path: Path, text: str, *, for_import_route: bool) -> str:
+    """Scrive il modulo nella codifica che il suo destinatario si aspetta.
+
+    Non e' pignoleria. Il modulo contiene caratteri non-ASCII **originali**:
+    il grado in `"AHT alto (>" & ... & "° pct)"` e, cosa piu' delicata, gli
+    accenti dentro `NormKey`:
+
+        s = Replace(s, "a-grave", "a"): s = Replace(s, "e-grave", "e")
+
+    Se quel file viene letto con la codifica sbagliata, quei caratteri si
+    corrompono e **NormKey smette di normalizzare gli accenti senza dire
+    niente**: le chiavi non combaciano piu' e le ore previste vanno a zero.
+    E' il tipo di guasto silenzioso che questo progetto esiste per togliere.
+
+    Quindi:
+      - `.bas` da importare -> cp1252 (ANSI), che e' quello che l'editor VBA
+        produce esportando e si aspetta importando;
+      - `.vb` da incollare  -> UTF-8 **con BOM**, cosi' gli editor di Windows
+        la riconoscono invece di indovinare ANSI.
+
+    Se un carattere non e' rappresentabile in cp1252 si solleva: meglio fermarsi
+    che scrivere un file corrotto.
+    """
+    data = text.replace("\r\n", "\n").replace("\n", "\r\n")
+    if for_import_route:
+        try:
+            path.write_bytes(data.encode("cp1252"))
+        except UnicodeEncodeError as exc:
+            raise PatchError(
+                f"{path.name}: il modulo contiene un carattere non rappresentabile "
+                f"in ANSI/cp1252 ({exc.reason} a offset {exc.start}).\n"
+                f"  L'import dell'editor VBA lo corromperebbe. Usa la via "
+                f"'incolla' con il file .vb."
+            ) from None
+        return "cp1252 (ANSI, per l'import di Excel)"
+    path.write_bytes(b"\xef\xbb\xbf" + data.encode("utf-8"))
+    return "UTF-8 con BOM (per aprirlo e copiarlo senza sorprese)"
 
 
 if __name__ == "__main__":

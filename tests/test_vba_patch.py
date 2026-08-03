@@ -162,6 +162,84 @@ def test_sul_modulo_reale():
     assert len(diff) == 2  # le due righe MsgBox riscritte, nient'altro rimosso
 
 
+# --- codifiche: il pezzo che puo' corrompere NormKey in silenzio ----------
+
+ACCENTATO = 'Attribute VB_Name = "M"\nOption Explicit\nSub S()\n' \
+            '    s = Replace(s, "à", "a")   \' 100° caso\n' \
+            '    MsgBox "fine"\nEnd Sub\n'
+
+
+def test_bas_per_import_in_ansi_senza_bom(tmp_path):
+    """L'editor VBA esporta e importa in ANSI: UTF-8 gli corromperebbe gli accenti."""
+    from make_vba_patch import _write
+
+    p = tmp_path / "m.bas"
+    _write(p, ACCENTATO, for_import_route=True)
+    raw = p.read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert '"à"' in raw.decode("cp1252")
+
+
+def test_vb_per_incollare_in_utf8_con_bom(tmp_path):
+    """Con il BOM gli editor di Windows non tirano a indovinare ANSI."""
+    from make_vba_patch import _write
+
+    p = tmp_path / "m.vb"
+    _write(p, ACCENTATO, for_import_route=False)
+    raw = p.read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+    assert '"à"' in raw.decode("utf-8-sig")
+
+
+def test_senza_bom_il_vb_letto_come_ansi_corrompe_normkey(tmp_path):
+    """La ragione per cui il BOM c'e': senza, l'accento si rompe e nessuno lo vede."""
+    from make_vba_patch import _write
+
+    p = tmp_path / "m.vb"
+    _write(p, ACCENTATO, for_import_route=False)
+    corrotto = p.read_bytes().decode("cp1252", "replace")
+    assert '"à"' not in corrotto  # e' proprio questo che il BOM previene
+
+
+def test_crlf_in_entrambi(tmp_path):
+    from make_vba_patch import _write
+
+    for suffix, route in ((".bas", True), (".vb", False)):
+        p = tmp_path / f"m{suffix}"
+        _write(p, ACCENTATO, for_import_route=route)
+        assert b"\r\n" in p.read_bytes()
+        assert b"\n\n" not in p.read_bytes().replace(b"\r\n", b"\n").replace(b"\n\n", b"")
+
+
+def test_carattere_non_rappresentabile_in_ansi_blocca(tmp_path):
+    """Meglio fermarsi che scrivere un .bas che l'import corromperebbe."""
+    from make_vba_patch import PatchError, _write
+
+    with pytest.raises(PatchError) as e:
+        _write(tmp_path / "m.bas", 'Sub S()\n  x = "中文"\nEnd Sub\n',
+               for_import_route=True)
+    assert "ANSI" in str(e.value)
+
+
+@pytest.mark.skipif(not SAMPLE.is_file(), reason="campione W30 assente")
+def test_accenti_di_normkey_sopravvivono_sul_modulo_reale(tmp_path):
+    """NormKey del W30 mappa a-grave/e-grave/...: devono restare leggibili."""
+    pytest.importorskip("oletools")
+    from make_vba_patch import _write, read_module
+
+    out, _ = patch(read_module(SAMPLE, "CreaMalpractice"))
+    bas = tmp_path / "m.bas"
+    vb = tmp_path / "m.vb"
+    _write(bas, out, for_import_route=True)
+    _write(vb, out, for_import_route=False)
+
+    for testo in (bas.read_bytes().decode("cp1252"),
+                  vb.read_bytes().decode("utf-8-sig")):
+        for accento in ("à", "è", "é", "ì", "ò", "ù"):
+            assert f'Replace(s, "{accento}"' in testo, f"{accento} corrotto"
+        assert "° pct" in testo
+
+
 @pytest.mark.skipif(not SAMPLE.is_file(), reason="campione W30 assente")
 def test_il_patchato_soddisfa_il_check_del_doctor():
     """Coerenza fra chi genera la patch e chi la verifica."""

@@ -1,0 +1,198 @@
+"""I limiti di riga scritti a mano nelle formule del template.
+
+Molte formule del workbook non leggono una colonna intera ma un intervallo con la
+riga finale **scritta nella formula**:
+
+    Report Agenti          -> SUMIFS(AT_DATASET!$P$2:$P$130000, ...)
+    Anagrafica             -> FILTER(SF_DATABASE!$BB$2:$BB$50000, ...)
+    Profilo Colonne SF     -> INDEX(SF_DATABASE!$A$2:$EM$3389, 0, n)
+
+Finche' i dati stanno sotto quel numero non cambia niente. Il giorno in cui lo
+superano, la formula smette di vedere le righe in eccesso — e **non c'e' nessun
+errore**: escono medie su un sottoinsieme, conteggi piu' bassi, percentuali
+plausibili. E' il guasto silenzioso di sempre, con la differenza che qui il
+detonatore e' la crescita del volume: arriva da solo, senza che nessuno tocchi
+niente.
+
+Questo modulo li trova leggendo le formule dal file. Il confronto con le righe
+davvero scritte lo fa `coherence._check_row_limits`, che ha i due numeri.
+
+Non serve Excel: le formule stanno nell'XML dentro lo zip.
+"""
+
+from __future__ import annotations
+
+import re
+import zipfile
+from dataclasses import dataclass
+from pathlib import Path
+
+from .errors import SourceError
+
+# `'Slot Only Cases'!$A$2:$E$1291` e `AT_DATASET!$P$2:$P$130000`.
+# Il confine a sinistra serve perche' `AT_DATASET` e' sottostringa di
+# `PSAT_DATASET` e `Turni` di `Helper Turni`.
+_RANGE = r"(?<![A-Za-z0-9_ ])'?{}'?!\$?[A-Z]{{1,3}}\$?(\d+):\$?[A-Z]{{1,3}}\$?(\d+)"
+_REF = r"(?<![A-Za-z0-9_ ])'?{}'?!(\$?[A-Z]{{1,3}}\$?\d+:\$?[A-Z]{{1,3}}\$?\d+)"
+
+
+@dataclass(frozen=True)
+class RowLimit:
+    """Un intervallo che si fermerebbe se i dati crescessero."""
+
+    dataset: str
+    max_row: int
+    sheet: str
+    ref: str
+
+    def __str__(self) -> str:
+        return f"{self.sheet}: {self.dataset}!{self.ref} (fino a riga {self.max_row})"
+
+
+def scan_row_limits(path: str | Path, datasets: tuple[str, ...]) -> list[RowLimit]:
+    """Tutti gli intervalli con riga finale esplicita verso i fogli dati.
+
+    Un riferimento a colonna intera (`AT_DATASET!$K:$K`) non ha limite e non
+    viene riportato: e' la forma robusta, ed e' quella da preferire quando si
+    scrive una formula nuova. Anche i riferimenti a tabella (`AHT_Data[...]`) non
+    hanno limite, perche' la tabella viene ridimensionata ai dati a ogni build.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise SourceError(f"Template non trovato: {path}")
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SourceError(f"{path.name}: non e' un file .xlsm/.xlsx valido.") from None
+
+    out: list[RowLimit] = []
+    visti: set[tuple[str, str, str]] = set()
+    with z:
+        for nome, target in _sheet_targets(z, path).items():
+            try:
+                raw = z.read(target).decode("utf8", "replace")
+            except KeyError:
+                continue
+            for formula in re.findall(r"<f[^>]*>(.*?)</f>", raw, re.S):
+                f = _unescape(formula)
+                for ds in datasets:
+                    for m in re.finditer(_RANGE.format(re.escape(ds)), f):
+                        fine = max(int(m.group(1)), int(m.group(2)))
+                        ref_m = re.search(_REF.format(re.escape(ds)), f[m.start() :])
+                        ref = ref_m.group(1).replace("$", "") if ref_m else f"?{fine}"
+                        chiave = (nome, ds, ref)
+                        if chiave in visti:
+                            continue
+                        visti.add(chiave)
+                        out.append(
+                            RowLimit(dataset=ds, max_row=fine, sheet=nome, ref=ref)
+                        )
+    return sorted(out, key=lambda l: (l.dataset, l.max_row, l.sheet, l.ref))
+
+
+@dataclass(frozen=True)
+class ErrorCells:
+    """Celle di errore trovate in un foglio, per tipo."""
+
+    sheet: str
+    kinds: dict[str, int]
+    examples: tuple[str, ...]
+
+    @property
+    def total(self) -> int:
+        return sum(self.kinds.values())
+
+    def __str__(self) -> str:
+        tipi = ", ".join(f"{n} {k}" for k, n in sorted(self.kinds.items()))
+        return f"{self.sheet}: {tipi} (es. {', '.join(self.examples)})"
+
+
+def scan_error_cells(path: str | Path, limit: int = 5) -> list[ErrorCells]:
+    """Le celle che dopo il ricalcolo contengono un errore Excel.
+
+    E' il controllo piu' economico che esista sul workbook finito, e intercetta
+    una famiglia di guasti che nessun controllo sulle sorgenti puo' vedere:
+
+    - `#SPILL!` — un array dinamico non ha spazio per espandersi. Arriva **da
+      solo** quando gli agenti o i casi crescono: la formula di ieri stava, quella
+      di oggi no.
+    - `#REF!` — una formula legge lo spill di un'altra che e' rimasta vuota.
+    - `#VALUE!` — tipicamente una MEDIAN/QUARTILE su un insieme vuoto.
+    - `#N/D` — un XLOOKUP che non trova, spesso un nome che non fa match.
+
+    Misurato sul primo W31: 116 celle di errore, tutte discendenti dallo stesso
+    guasto (due colonne di SF_DATABASE non riempite). Nessuna era visibile
+    guardando i fogli principali.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise SourceError(f"Workbook non trovato: {path}")
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SourceError(f"{path.name}: non e' un file .xlsm/.xlsx valido.") from None
+
+    out: list[ErrorCells] = []
+    with z:
+        for nome, target in _sheet_targets(z, path).items():
+            try:
+                raw = z.read(target).decode("utf8", "replace")
+            except KeyError:
+                continue
+            trovate = re.findall(
+                r'<c r="([A-Z]+\d+)"[^>]*t="e"[^>]*>.*?<v>(.*?)</v>', raw, re.S
+            )
+            if not trovate:
+                continue
+            kinds: dict[str, int] = {}
+            for _ref, val in trovate:
+                v = _unescape(val)
+                kinds[v] = kinds.get(v, 0) + 1
+            out.append(
+                ErrorCells(
+                    sheet=nome,
+                    kinds=kinds,
+                    examples=tuple(ref for ref, _v in trovate[:limit]),
+                )
+            )
+    return sorted(out, key=lambda e: -e.total)
+
+
+def _sheet_targets(z: zipfile.ZipFile, path: Path) -> dict[str, str]:
+    try:
+        wb = z.read("xl/workbook.xml").decode("utf8", "replace")
+        rels = z.read("xl/_rels/workbook.xml.rels").decode("utf8", "replace")
+    except KeyError:
+        raise SourceError(f"{path.name}: struttura .xlsx inattesa.") from None
+    relmap = dict(re.findall(r'Id="(rId\d+)"[^>]*Target="([^"]+)"', rels))
+    fogli: dict[str, str] = {}
+    for m in re.finditer(r"<sheet ([^>]*?)/>", wb):
+        nome = re.search(r'name="([^"]*)"', m.group(1))
+        rid = re.search(r'r:id="(rId\d+)"', m.group(1))
+        if not (nome and rid and rid.group(1) in relmap):
+            continue
+        target = relmap[rid.group(1)].lstrip("/")
+        fogli[_unescape(nome.group(1))] = (
+            target if target.startswith("xl/") else "xl/" + target
+        )
+    return fogli
+
+
+def binding_limits(limits: list[RowLimit]) -> dict[str, RowLimit]:
+    """Per ogni dataset, il limite piu' BASSO: e' quello che morde per primo."""
+    out: dict[str, RowLimit] = {}
+    for lim in limits:
+        attuale = out.get(lim.dataset)
+        if attuale is None or lim.max_row < attuale.max_row:
+            out[lim.dataset] = lim
+    return out
+
+
+def _unescape(s: str) -> str:
+    return (
+        s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+    )

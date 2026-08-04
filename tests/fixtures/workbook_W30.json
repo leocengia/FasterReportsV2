@@ -1,0 +1,510 @@
+{
+  "workbook": "Omni Report W30.xlsm",
+  "headers": {
+    "AT_DATASET": {
+      "dimension": "A1:Q130000",
+      "hidden": false,
+      "columns": {
+        "B": "Agent Email",
+        "C": "Supervisor Email",
+        "D": "Agent Queue Group Name",
+        "E": "Agent Business Location",
+        "F": "Agent State",
+        "G": "Next Agent State",
+        "H": "Number of Active Contacts",
+        "I": "Start Time",
+        "J": "End Time",
+        "K": "Total Time in seconds",
+        "L": "Productive Aux Flag (Yes / No)",
+        "M": "Source",
+        "N": "Salesforce State",
+        "O": "(libera)",
+        "P": "Data Milano",
+        "Q": "Ora Milano"
+      }
+    },
+    "ATwi_DATASET": {
+      "dimension": "A1:P15342",
+      "hidden": false,
+      "columns": {
+        "B": "Workitem ID",
+        "C": "Agent Email",
+        "D": "Agent Business Location",
+        "E": "Connected to Agent Time",
+        "F": "Disconnected Time",
+        "G": "Hold Time in seconds",
+        "H": "Talk Time in seconds",
+        "I": "Wrap-up Time in seconds",
+        "J": "Handle Time in seconds",
+        "K": "Transfer Type",
+        "L": "Transfer Reason",
+        "M": "Initiation Method",
+        "N": "Outbound",
+        "O": "Outbound Type",
+        "P": "Channel ID"
+      }
+    },
+    "SF_DATABASE": {
+      "dimension": "A1:EM3568",
+      "hidden": false,
+      "columns": {
+        "A": "Date Viewpoint",
+        "B": "Account Name",
+        "C": "Account Super Region",
+        "D": "account_managed_by_name",
+        "E": "account_record_type",
+        "F": "account_region",
+        "G": "account_vrbo_connected",
+        "H": "Agent Vendor Super Region Name",
+        "I": "area_mgmt_territory_name",
+        "J": "attribute",
+        "K": "Auto Chase Enabled",
+        "L": "auto_chase_category",
+        "M": "auto_chase_category_name",
+        "N": "auto_chase_status",
+        "O": "billable_group",
+        "P": "Booking System Name",
+        "Q": "booking_pos",
+        "R": "Case Category",
+        "S": "Case Channel",
+        "T": "Case Origin",
+        "U": "Case Origin (group)",
+        "V": "Case Queue Name",
+        "W": "Case Record Type",
+        "X": "Case Resolution Category",
+        "Y": "Case Subtopic",
+        "Z": "Case Type",
+        "AA": "Case Worked in VRBO Instance Exclusion",
+        "AB": "case_has_incoming_email",
+        "AC": "case_has_outgoing_email",
+        "AD": "case_language (group)",
+        "AE": "case_number",
+        "AF": "case_record_type",
+        "AG": "case_resolution_type",
+        "AH": "case_status",
+        "AI": "Cases with Flow Used Ind",
+        "AJ": "Channel Group",
+        "AK": "claim_number_list",
+        "AL": "claim_reason_list",
+        "AM": "claim_status_list",
+        "AN": "claim_subtype_list",
+        "AO": "claim_type_list",
+        "AP": "CoBrowse Used",
+        "AQ": "connectivity_platform",
+        "AR": "connectivity_status",
+        "AS": "connectivity_system_name",
+        "AT": "connectivity_system_vendor",
+        "AU": "connectivity_type",
+        "AV": "cross_support_line_of_business",
+        "AW": "Date (Range)",
+        "AX": "Date (Relative)",
+        "AY": "department",
+        "AZ": "DUET Experience Area",
+        "BA": "eg_brand_name",
+        "BB": "Employee Name",
+        "BC": "Employee Title",
+        "BD": "employee_role_name",
+        "BE": "Has Child Cases",
+        "BF": "High Impact Event Flag",
+        "BG": "Is Canceled?",
+        "BH": "Is MUVR?",
+        "BI": "issue_type_list",
+        "BJ": "legal_inquiry",
+        "BK": "Line of Business",
+        "BL": "Manager Name",
+        "BM": "mkt_mgmt_territory_name",
+        "BN": "Omni Level Indicator",
+        "BO": "Package Indicator",
+        "BP": "Parent Chain Name",
+        "BQ": "parentid",
+        "BR": "Partner Segment",
+        "BS": "payment_method_list",
+        "BT": "post_training_tenure",
+        "BU": "post_training_tenure_at_case_close",
+        "BV": "Primary Category",
+        "BW": "Property Brand",
+        "BX": "Property Country Name",
+        "BY": "Property Service Tier",
+        "BZ": "Property Tenure Distribution",
+        "CA": "Property_Market",
+        "CB": "Property_Region",
+        "CC": "Property_SuperRegion",
+        "CD": "reimbursement_type_list",
+        "CE": "request_category",
+        "CF": "resolution_outcome_indicator",
+        "CG": "resolution_sub_category",
+        "CH": "Secondary Category",
+        "CI": "SF Initiative",
+        "CJ": "standard_exclusions",
+        "CK": "Strategic Accounts Flag",
+        "CL": "Supply System Name",
+        "CM": "survey_response_id",
+        "CN": "territory_enterprise_account_tf",
+        "CO": "territory_name",
+        "CP": "territory_sub_tier",
+        "CQ": "territory_super_region",
+        "CR": "territory_tier",
+        "CS": "User Routing Profile",
+        "CT": "User_Office_Location",
+        "CU": "Vendor Name",
+        "CV": "VIP Access Enabled",
+        "CW": "vrbo_brand_name",
+        "CX": "vrbo_partner_type",
+        "CY": "vrbo_person_type",
+        "CZ": "vrbo_premier_partner",
+        "DA": "vrbo_region",
+        "DB": "vrbo_super_region",
+        "DC": "WFM Staff Group",
+        "DD": "WFM Super Region",
+        "DE": "work_function",
+        "DF": "work_tier",
+        "DG": "Workforce Staff Function",
+        "DH": "expedia_hotelid",
+        "DI": "request_count",
+        "DJ": "star_rating",
+        "DK": "territory_enterprise_account",
+        "DL": "total_property_count",
+        "DM": "account_management_service_tier",
+        "DN": "case_language",
+        "DO": "Handle Time Outlier",
+        "DP": "Is_ClosedCase",
+        "DQ": "resolution_category",
+        "DR": "user_agent_queue_group_name",
+        "DS": "user_routing_profile",
+        "DT": "Vendor Group",
+        "DU": "AHT due to Misroutes",
+        "DV": "aht_due_to_misrouted_hours",
+        "DW": "AI Generated Summary Used",
+        "DX": "Avg. Time to Case Closure (days)",
+        "DY": "Case AHT (mins)",
+        "DZ": "Case Closure SLA ",
+        "EA": "Case Working SLA % ",
+        "EB": "case_misrouted_count",
+        "EC": "Co-Browse Usage %",
+        "ED": "Distinct Cases",
+        "EE": "DUET Score",
+        "EF": "DUET Score | Whole",
+        "EG": "Flow Completion %",
+        "EH": "logged_hrs_incld_in_aht",
+        "EI": "Misrouted Cases",
+        "EJ": "Overall Performance to AHT Target",
+        "EK": "PSAT Score",
+        "EL": "PSAT Score | Whole",
+        "EM": "THT due to Misroutes"
+      }
+    },
+    "PSAT_DATASET": {
+      "dimension": "A1:ED132",
+      "hidden": false,
+      "columns": {
+        "A": "Viewpoint - Deep Dive",
+        "B": "Account Record Group",
+        "C": "Account Record Type",
+        "D": "Account Segment",
+        "E": "Account VR Integration",
+        "F": "Agent Division",
+        "G": "Agent Job Title",
+        "H": "Agent Manager Name",
+        "I": "Agent Name",
+        "J": "Agent Office Location",
+        "K": "Agent Operation Group",
+        "L": "Agent Post Training Tenure",
+        "M": "Agent Post Training Tenure at Case Close",
+        "N": "Agent Queue Line of Business",
+        "O": "Agent Queue Line of Business Subtype",
+        "P": "Agent Queue Name",
+        "Q": "Agent Role Name",
+        "R": "Agent Super Region",
+        "S": "Agent Third Manager Name",
+        "T": "Agent Vendor Name",
+        "U": "Attempted Self-Serve",
+        "V": "Case Age",
+        "W": "Case Cobrowse Flag",
+        "X": "Case Flow Name",
+        "Y": "Case Language Name (group)",
+        "Z": "Case Origin Group",
+        "AA": "Case Primary Category",
+        "AB": "Case Record Group",
+        "AC": "Case Record Type",
+        "AD": "Case Resolution Type",
+        "AE": "Case Secondary Category",
+        "AF": "Case Skill",
+        "AG": "Case SOVA Flag",
+        "AH": "Case Type",
+        "AI": "case_has_booking_flag",
+        "AJ": "case_has_vrbocare_claim_flag",
+        "AK": "DUET Experience Area",
+        "AL": "Ease Experience",
+        "AM": "eg_brand_name",
+        "AN": "HP Account Region",
+        "AO": "HP Account Super Region",
+        "AP": "Question Text",
+        "AQ": "Resolution Outcome",
+        "AR": "Satisfaction Experience",
+        "AS": "Spoken Language (group)",
+        "AT": "Support Line of Business",
+        "AU": "Survey Date (Exact)",
+        "AV": "Survey Date (Relative)",
+        "AW": "Survey Name",
+        "AX": "Survey Name Split",
+        "AY": "User Routing Profile",
+        "AZ": "Vendor Name Filter",
+        "BA": "vip_access_enabled",
+        "BB": "VR Website Region",
+        "BC": "VR Website Super Region",
+        "BD": "Work Function",
+        "BE": "Written Language (group)",
+        "BF": "account_record_group",
+        "BG": "account_record_type",
+        "BH": "account_region_name",
+        "BI": "account_segment",
+        "BJ": "account_super_region_name",
+        "BK": "account_vr_integration",
+        "BL": "agent_division",
+        "BM": "agent_job_title",
+        "BN": "agent_manager_name",
+        "BO": "agent_name",
+        "BP": "agent_office_location",
+        "BQ": "agent_operation_group",
+        "BR": "agent_post_training_tenure",
+        "BS": "agent_role_name",
+        "BT": "agent_second_manager_name",
+        "BU": "agent_super_region",
+        "BV": "agent_third_manager_name",
+        "BW": "agent_vendor_name",
+        "BX": "attempted_self_serve",
+        "BY": "Case Language Name",
+        "BZ": "case_closed_date",
+        "CA": "case_created_date",
+        "CB": "case_language_name",
+        "CC": "case_origin_group",
+        "CD": "case_primary_category",
+        "CE": "case_record_group",
+        "CF": "case_record_type",
+        "CG": "case_resolution_type",
+        "CH": "case_secondary_category",
+        "CI": "case_skill",
+        "CJ": "case_type",
+        "CK": "ease_experience",
+        "CL": "fact_cobrowse_used",
+        "CM": "fact_flow_name",
+        "CN": "fact_sova_flag",
+        "CO": "High Impact Event ID",
+        "CP": "High Impact Event Subject",
+        "CQ": "impact_name",
+        "CR": "impact_subject",
+        "CS": "nps_value",
+        "CT": "post_training_tenure_at_case_close",
+        "CU": "question_text",
+        "CV": "resolution_outcome_indicator",
+        "CW": "satisfaction_experience",
+        "CX": "Selected Case Action Date",
+        "CY": "Spoken Language",
+        "CZ": "spoken_language__name",
+        "DA": "support_line_of_business",
+        "DB": "Survey Date",
+        "DC": "Survey Response ID",
+        "DD": "survey_name",
+        "DE": "survey_recorded_timestamp_utc",
+        "DF": "survey_response_id",
+        "DG": "user_agent_queue_group_name",
+        "DH": "user_routing_profile",
+        "DI": "vr_website_region",
+        "DJ": "vr_website_super_region",
+        "DK": "Written Language",
+        "DL": "written_language__name",
+        "DM": "ease_score",
+        "DN": "Surveys Submitted",
+        "DO": "Case Number",
+        "DP": "psat_score",
+        "DQ": "response_text",
+        "DR": "ReflectIQ Mode",
+        "DS": "ReflectIQ Sub Theme 1",
+        "DT": "ReflectIQ Sub Theme 2",
+        "DU": "ReflectIQ Sub Theme 3",
+        "DV": "ReflectIQ Theme 1",
+        "DW": "ReflectIQ Theme 2",
+        "DX": "ReflectIQ Theme 3",
+        "DY": "reflectiq_sub_theme_1",
+        "DZ": "reflectiq_sub_theme_2",
+        "EA": "reflectiq_sub_theme_3",
+        "EB": "reflectiq_theme_1",
+        "EC": "reflectiq_theme_2",
+        "ED": "reflectiq_theme_3"
+      }
+    },
+    "Turni": {
+      "dimension": "A1:I1141",
+      "hidden": false,
+      "columns": {
+        "A": "Nome agente",
+        "B": "Team/Skill",
+        "C": "Contratto",
+        "D": "Ore/gg",
+        "E": "Data",
+        "F": "Stato",
+        "G": "Inizio turno",
+        "H": "Fine turno",
+        "I": "chiave"
+      }
+    },
+    "Slot Only Cases": {
+      "dimension": "A1:E1291",
+      "hidden": false,
+      "columns": {
+        "A": "chiave (nome BO norm.)",
+        "B": "Data",
+        "C": "Slot inizio",
+        "D": "Slot fine",
+        "E": "Stato BO"
+      }
+    }
+  },
+  "usage": {
+    "AT_DATASET": {
+      "B": [
+        "Analisi Status",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "F": [
+        "Analisi Status",
+        "Report Agenti"
+      ],
+      "H": [
+        "Verifica AHT"
+      ],
+      "K": [
+        "Analisi Status",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "L": [
+        "Analisi Status",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "P": [
+        "Analisi Status",
+        "Report Agenti"
+      ]
+    },
+    "ATwi_DATASET": {
+      "C": [
+        "Outbound Exploitation",
+        "Verifica AHT"
+      ],
+      "H": [
+        "Outbound Exploitation"
+      ],
+      "I": [
+        "Outbound Exploitation"
+      ],
+      "J": [
+        "Verifica AHT"
+      ],
+      "M": [
+        "Outbound Exploitation"
+      ]
+    },
+    "SF_DATABASE": {
+      "A": [
+        "Profilo Colonne SF"
+      ],
+      "U": [
+        "AHT Outliers",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "Z": [
+        "AHT Outliers"
+      ],
+      "AC": [
+        "Report Agenti"
+      ],
+      "AE": [
+        "AHT Outliers"
+      ],
+      "BB": [
+        "AHT Outliers",
+        "AHT Outliers Export",
+        "Anagrafica",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "BV": [
+        "AHT Outliers"
+      ],
+      "DY": [
+        "AHT Outliers",
+        "AHT Outliers Export",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "EC": [
+        "Report Agenti"
+      ],
+      "EI": [
+        "Report Agenti"
+      ]
+    },
+    "PSAT_DATASET": {
+      "I": [
+        "PSAT Positive Export",
+        "Recap PSAT Positive",
+        "Report Agenti"
+      ],
+      "AU": [
+        "Recap PSAT Positive"
+      ],
+      "DO": [
+        "PSAT Positive Export",
+        "Recap PSAT Positive"
+      ],
+      "DP": [
+        "PSAT Positive Export",
+        "Recap PSAT Positive",
+        "Report Agenti"
+      ],
+      "DQ": [
+        "Recap PSAT Positive"
+      ]
+    },
+    "Turni": {
+      "A": [
+        "Helper Turni"
+      ],
+      "B": [
+        "Helper Turni"
+      ],
+      "C": [
+        "Helper Turni"
+      ],
+      "D": [
+        "Helper Turni"
+      ],
+      "E": [
+        "Helper Turni"
+      ],
+      "F": [
+        "Helper Turni"
+      ],
+      "G": [
+        "Helper Turni"
+      ],
+      "I": [
+        "Helper Turni"
+      ]
+    },
+    "Slot Only Cases": {}
+  },
+  "tables": [
+    {
+      "name": "AHT_Data",
+      "ref": "A1:EM3389",
+      "sheet": "SF_DATABASE",
+      "columns": 143,
+      "sheet_dimension": "A1:EM3568"
+    }
+  ]
+}

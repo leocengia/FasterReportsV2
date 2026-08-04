@@ -1,0 +1,89 @@
+# Impostazioni operative. Il CONTRATTO delle colonne sta in columns.yml:
+# qui ci sono solo percorsi e scelte di esecuzione.
+
+# csv  -> legge da input/ (oggi)
+# sql  -> non ancora implementato (piano §13). Il contratto non cambia.
+source: csv
+
+paths:
+  input: input
+  output: output
+  template: template/Omni_Report_TEMPLATE.xlsm
+
+# Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
+# reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di
+# settimana e' nel nome e cambia ogni volta, e l'estensione dipende da chi
+# produce l'export. Pretendere nomi fissi vorrebbe dire rinominare quattro file
+# a mano ogni settimana, cioe' rimettere il passaggio manuale che si vuole
+# togliere.
+#
+# Il FORMATO non si dichiara: si riconosce dall'estensione. `.csv`/`.txt` passano
+# da csvsource, `.xlsx`/`.xlsm` da tablesource (dataset tabellari) o dagli
+# adattatori WFM (matrici larghe). Cosa sia il file lo dice `reader:` in
+# columns.yml.
+#
+# Ogni pattern deve corrispondere a UN SOLO file: zero o molti sono entrambi
+# errori parlanti. Un pattern senza caratteri jolly resta un nome esatto.
+input_files:
+  AT_DATASET: "AT DATASET*"
+  ATwi_DATASET: "ATwi DATASET*"
+  SF_DATABASE: "SF DATABASE*"
+  PSAT_DATASET: "PSAT DATASET*"
+  Turni: "Turni*"
+  Slot Only Cases: "Back*Office*"
+
+sources:
+  # Skill che entrano nel report. Confronto per UGUAGLIANZA ESATTA, come il
+  # FILTER di 'Helper Turni' (Turni!$B="HPO").
+  skills: ["HPO"]
+
+  # Le skill marcate con asterisco (`HPO   *`) entrano nel report?
+  #
+  # false = fedele a oggi: restano fuori da 'Turni' ma il preflight BLOCCA,
+  #         perche' quegli agenti finiscono comunque in 'Slot Only Cases' e le
+  #         regole di malpractice li valutano a meta' (docs/audit-workbook-W30.md §3).
+  # true  = entrano. Cambia i numeri rispetto alle settimane precedenti.
+  #
+  # Non c'e' un default innocuo: la scelta va fatta. Lasciato a false perche'
+  # non tocca i numeri storici senza che qualcuno lo decida.
+  include_marked_skills: false
+
+  # Foglio da leggere in ciascuna sorgente (null = il primo).
+  roster_sheet: publish
+  backoffice_sheet: Only Cases Shifts
+
+  # Sezioni del foglio back office da includere (null = tutte quelle di agenti).
+  backoffice_sections: null
+
+  # Il lunedi' della settimana, come seriale Excel. Se null, si ricava
+  # dall'intervallo di AT_DATASET!Start Time: una verita' sola invece di due.
+  monday_serial: null
+
+output:
+  # {week} viene sostituito dal numero settimana passato alla CLI
+  workbook_name: "Omni_Report_W{week}.xlsm"
+  preflight_name: "preflight_W{week}.txt"
+
+excel:
+  visible: false
+  # La macro mostra due MsgBox (fine esecuzione ed errore): bloccanti in
+  # automazione. Il template va patchato con un flag SilentMode — piano §12,
+  # istruzioni in docs/architettura.md §6.
+  macro: Refresh_Dettaglio_Malpractice
+  silent_mode_flag: SilentMode
+  # Le formule ad array (XLOOKUP/FILTER/UNIQUE) + INDIRECT sono volatili:
+  # serve un rebuild completo, non un calculate() semplice.
+  full_rebuild: true
+
+derived:
+  # formula -> le formule P/Q del template calcolano Data/Ora Milano (default:
+  #            fedele, nessuna logica duplicata in Python)
+  # python  -> la pipeline scrive i valori (piu' rapido su 130k righe)
+  mode: formula
+
+validation:
+  # Quota massima di valori non coercibili per colonna prima di bloccare.
+  # 0.0 = tolleranza zero. Le celle vuote non contano come non coercibili.
+  max_uncoercible_ratio: 0.02
+  # Numero minimo di righe dati per considerare un dataset plausibile.
+  min_rows: 1

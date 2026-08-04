@@ -1,0 +1,30 @@
+# Input/output di runtime — mai versionati
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# Il template contiene dati reali degli agenti. Per default viene versionato
+# (cosi' la patch al VBA non si perde), ma se preferisci tenerlo fuori dal repo
+# scommenta la riga seguente — e conservane una copia altrove, perche' la patch
+# e' l'unica cosa non ricostruibile da qui.
+# template/*.xlsm
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Excel
+~$*.xls*
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -164,6 +164,20 @@ datasets:
         aliases: ["case_origin_group"]
         consumers: ["Report Agenti"]
         notes: "Valori Phone/Other. Esiste anche 'Case Origin' (col. T): normalizzano diverso, nessuna ambiguita'."
+      - canonical: "Case Type"
+        target_col: Z
+        role: input
+        dtype: str
+        aliases: ["case_type"]
+        consumers: ["AHT Outliers"]
+        notes: >
+          Aggiunta il 2026-08-04, dopo che 'AHT Outliers' e' uscito VUOTO nel
+          primo W31 generato: le sue formule raggruppano per tipo di caso
+          (LET su AHT_Data[Case Type], MEDIAN/QUARTILE per tipo) e senza questa
+          colonna il FILTER non trova nulla.
+          Era sfuggita perche' le formule la citano come riferimento
+          strutturato — `AHT_Data[Case Type]` — e non come `SF_DATABASE!$Z`:
+          l'audit cercava solo la seconda forma. Ora le risolve entrambe.
       - canonical: "case_has_outgoing_email"
         target_col: AC
         role: input
@@ -185,6 +199,16 @@ datasets:
         aliases: ["employee_name"]
         consumers: ["Report Agenti", "Anagrafica", "VBA:AddSFRules"]
         notes: "Chiave agente. Il VBA la usa per l'ultima riga (End(xlUp) su BB)."
+      - canonical: "Primary Category"
+        target_col: BV
+        role: input
+        dtype: str
+        aliases: ["primary_category"]
+        consumers: ["AHT Outliers"]
+        notes: >
+          Aggiunta il 2026-08-04 insieme a 'Case Type', stessa causa. Esiste
+          anche 'Secondary Category' (CH), che nessuna formula legge: se un
+          giorno servisse, va aggiunta qui.
       - canonical: "Case AHT (mins)"
         target_col: DY
         role: input

@@ -412,17 +412,34 @@
         "Profilo Colonne SF"
       ],
       "U": [
-        "Report Agenti"
+        "AHT Outliers",
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "Z": [
+        "AHT Outliers"
       ],
       "AC": [
         "Report Agenti"
       ],
+      "AE": [
+        "AHT Outliers"
+      ],
       "BB": [
+        "AHT Outliers",
+        "AHT Outliers Export",
         "Anagrafica",
-        "Report Agenti"
+        "Report Agenti",
+        "Verifica AHT"
+      ],
+      "BV": [
+        "AHT Outliers"
       ],
       "DY": [
-        "Report Agenti"
+        "AHT Outliers",
+        "AHT Outliers Export",
+        "Report Agenti",
+        "Verifica AHT"
       ],
       "EC": [
         "Report Agenti"

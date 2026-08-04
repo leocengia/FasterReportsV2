@@ -104,6 +104,14 @@ def test_le_tre_colonne_trovate_nellaudit_sono_nel_contratto(contract):
         ("AT_DATASET", "H", "Number of Active Contacts"),      # Verifica AHT
         ("ATwi_DATASET", "J", "Handle Time in seconds"),       # Verifica AHT
         ("PSAT_DATASET", "AU", "Survey Date (Exact)"),         # Recap PSAT Positive
+        # Trovate il 2026-08-04, ma non da questo test: dal foglio 'AHT Outliers'
+        # uscito VUOTO nel primo W31 generato. Le sue formule le citano come
+        # riferimento strutturato (`AHT_Data[Case Type]`), e l'audit che genera
+        # la fixture cercava solo `SF_DATABASE!$Z`: il test girava su un elenco
+        # incompleto e quindi taceva. Ora l'audit risolve anche i riferimenti
+        # strutturati, e questo test le vede.
+        ("SF_DATABASE", "Z", "Case Type"),                     # AHT Outliers
+        ("SF_DATABASE", "BV", "Primary Category"),              # AHT Outliers
     ]
     for ds_name, letter, canonical in attese:
         ds = contract.dataset(ds_name)

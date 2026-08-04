@@ -31,7 +31,17 @@ import zipfile
 from collections import defaultdict
 from pathlib import Path
 
-DEFAULT_DATASETS = ["AT_DATASET", "ATwi_DATASET", "SF_DATABASE", "PSAT_DATASET"]
+# Tutti e SEI i fogli dati, non solo i 4 CSV. `Turni` e `Slot Only Cases` sono
+# entrati nel contratto dopo, e restando fuori da questa lista la fixture dei test
+# nasceva senza di loro: un intero pezzo di contratto non verificato.
+DEFAULT_DATASETS = [
+    "AT_DATASET",
+    "ATwi_DATASET",
+    "SF_DATABASE",
+    "PSAT_DATASET",
+    "Turni",
+    "Slot Only Cases",
+]
 
 
 def col_index(letters: str) -> int:
@@ -39,6 +49,14 @@ def col_index(letters: str) -> int:
     for ch in letters:
         n = n * 26 + (ord(ch) - 64)
     return n
+
+
+def col_letters(index: int) -> str:
+    out = ""
+    while index:
+        index, rem = divmod(index - 1, 26)
+        out = chr(65 + rem) + out
+    return out
 
 
 class Workbook:
@@ -106,9 +124,38 @@ class Workbook:
             out[re.match(r"[A-Z]+", ref).group(0)] = _unescape(val)
         return out
 
+    def table_columns(self) -> dict[str, tuple[str, dict[str, str]]]:
+        """`AHT_Data` -> (foglio, {nome colonna: lettera}).
+
+        Serve a risolvere i riferimenti strutturati: nelle formule una colonna di
+        tabella si scrive `AHT_Data[Case Type]`, non `SF_DATABASE!$Z`.
+        """
+        out: dict[str, tuple[str, dict[str, str]]] = {}
+        owner: dict[str, str] = {}
+        for name, target in self.sheets.items():
+            rel = target.replace("worksheets/", "worksheets/_rels/") + ".rels"
+            if rel not in self.z.namelist():
+                continue
+            x = self.z.read(rel).decode("utf8", "replace")
+            for t in re.findall(r'Target="([^"]*tables/[^"]+)"', x):
+                owner[Path(t).name] = name
+        for n in sorted(p for p in self.z.namelist() if "/tables/" in p):
+            x = self.z.read(n).decode("utf8", "replace")
+            m = re.search(r'<table[^>]*name="([^"]+)"[^>]*ref="([^"]+)"', x)
+            if not m:
+                continue
+            prima = re.match(r"([A-Z]+)", m.group(2))
+            base = col_index(prima.group(1)) if prima else 1
+            nomi = re.findall(r"<tableColumn[^>]*name=\"([^\"]+)\"", x)
+            lettere = {
+                _unescape(nome): col_letters(base + i) for i, nome in enumerate(nomi)
+            }
+            out[m.group(1)] = (owner.get(Path(n).name, "?"), lettere)
+        return out
+
     def formula_usage(self, datasets: list[str]) -> dict[str, dict[str, set[str]]]:
         usage: dict[str, dict[str, set[str]]] = {d: defaultdict(set) for d in datasets}
-        # Due insidie, entrambe scoperte col sangue su questo workbook:
+        # Tre insidie, tutte scoperte col sangue su questo workbook:
         #
         # 1. I nomi di foglio con spazi, nelle formule, sono fra apici:
         #    `'Slot Only Cases'!$A$2`. Un pattern che pretende `Cases!` non li
@@ -117,11 +164,23 @@ class Workbook:
         #    `AT_DATASET` sta dentro `PSAT_DATASET`, `Turni` dentro
         #    `Helper Turni`. Serve un confine a sinistra che escluda anche uno
         #    spazio, altrimenti si attribuiscono a uno le colonne dell'altro.
+        # 3. Una colonna dentro un ListObject si cita per NOME, non per lettera:
+        #    `AHT_Data[Case Type]`. Cercando solo `SF_DATABASE!$Z` quelle
+        #    colonne risultano lette da nessuno — e infatti due colonne vere
+        #    (`Case Type`, `Primary Category`) sono rimaste fuori dal contratto,
+        #    e il foglio 'AHT Outliers' e' uscito vuoto: le sue formule
+        #    filtravano una colonna che la pipeline non riempiva.
         patterns = {
             d: re.compile(
                 r"(?<![A-Za-z0-9_ ])" + re.escape(d) + r"'?!\$?([A-Z]{1,3})\$?\d*"
             )
             for d in datasets
+        }
+        tabelle = self.table_columns()
+        strutturati = {
+            nome: (foglio, lettere)
+            for nome, (foglio, lettere) in tabelle.items()
+            if foglio in datasets
         }
         for name in self.sheets:
             raw = self.xml(name)
@@ -129,6 +188,11 @@ class Workbook:
                 for d, pat in patterns.items():
                     for m in pat.finditer(f):
                         usage[d][m.group(1)].add(name)
+                for tab, (foglio, lettere) in strutturati.items():
+                    for m in re.finditer(re.escape(tab) + r"\[([^\]\[]+)\]", f):
+                        col = _unescape(m.group(1))
+                        if col in lettere:
+                            usage[foglio][lettere[col]].add(name)
         return usage
 
     def tables(self) -> list[dict]:

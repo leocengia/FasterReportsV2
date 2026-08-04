@@ -292,6 +292,7 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         wanted_skills=settings.sources.skills,
         include_marked=settings.sources.include_marked_skills,
         aliases_available=bool(ctx.get("aliases")),
+        aliases=ctx.get("aliases"),
     )
 
 

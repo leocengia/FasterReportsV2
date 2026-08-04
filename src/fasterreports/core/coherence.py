@@ -90,6 +90,7 @@ def check_sources(
     week_declared: int | None = None,
     week_inferred: tuple[int, int] | None = None,
     case_owners: dict[str, list] | None = None,
+    aliases: dict[str, str] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -124,6 +125,9 @@ def check_sources(
     if case_owners and email_agenti is not None:
         for fonte, nomi in case_owners.items():
             _check_case_owners_email(rep, nomi, email_agenti, fonte)
+
+    if case_owners and turni_rows is not None:
+        _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -400,6 +404,65 @@ def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
 
 
 # --- 3. insiemi di agenti --------------------------------------------------
+
+def _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases) -> None:
+    """Chi ha lavorato casi e non ha un turno nel roster.
+
+    La terza direzione dello stesso guasto. Le altre due la guardano dal roster
+    ('agenti con slot ma senza turni') e da 'Email Agenti' ('agenti senza
+    email'); questa parte dai **casi**, che e' da dove arrivano le persone che
+    nel roster HPO non ci sono affatto: un altro team che ha coperto, un
+    supervisore, un ingresso nuovo.
+
+    Conseguenza nel report: compaiono in 'Report Agenti' con `Ore previste = 0` e
+    la produttivita' non calcolabile, e in `AddLoginRows` il loro orario atteso
+    ripiega su `defaultStart` — non sul turno vero, che non esiste.
+
+    Misurato sulla W31: 'lucia serafini' (1 caso, nessun turno HPO).
+
+    Il confronto passa dalla tabella alias, perche' le due fonti scrivono i nomi
+    diversamente: il roster ha 'Eleonora Rosa Sissa', Salesforce 'Eleonora
+    Sissa'. Senza gli alias questo controllo segnalerebbe quattro persone che
+    hanno il loro turno — cioe' sarebbe rumore, e il rumore fa ignorare i
+    controlli.
+    """
+    alias = aliases or {}
+
+    def varianti(nome: str) -> set[str]:
+        k = normalize_name(nome)
+        return {k, alias.get(k, k)}
+
+    turni: set[str] = set()
+    for r in turni_rows:
+        if r[0]:
+            turni |= varianti(r[0])
+
+    senza: dict[str, set[str]] = {}
+    for fonte, nomi in case_owners.items():
+        for nome in nomi:
+            if not nome:
+                continue
+            if not (varianti(nome) & turni):
+                senza.setdefault(normalize_name(nome), set()).add(fonte)
+
+    if senza:
+        rep.add(Finding(
+            check="agenti con casi ma senza turno",
+            level=SEGNALA,
+            summary=f"{len(senza)} nomi hanno lavorato casi ma non sono in 'Turni'",
+            details=[
+                f"{nome} (da {', '.join(sorted(fonti))})"
+                for nome, fonti in sorted(senza.items())
+            ],
+            hint=(
+                "In 'Report Agenti' avranno 'Ore previste' = 0 e nessuna\n"
+                "produttivita': non c'e' un turno con cui confrontare le ore.\n"
+                "Le regole sui casi li valutano, quelle sul turno no.\n"
+                "Normale se e' un altro team o un supervisore che ha coperto;\n"
+                "se invece sono del team, manca la loro riga nel roster."
+            ),
+        ))
+
 
 def _check_skill_scritta(rep, turni_rows, wanted: tuple[str, ...]) -> None:
     """Ogni riga di `Turni` passa dal FILTER di 'Helper Turni'?

@@ -419,3 +419,45 @@ def test_skill_non_esatta_in_turni_blocca():
 def test_skill_esatta_non_segnala_nulla():
     rep = check_sources(turni_rows=[turni_row("Mario Rossi")], wanted_skills=("HPO",))
     assert _finding(rep, "FILTER non riconoscera") is None
+
+
+def test_chi_ha_casi_ma_nessun_turno_viene_segnalato():
+    """La terza direzione dello stesso guasto, misurata sulla W31.
+
+    'lucia serafini' ha 1 caso in SF e nessun turno HPO: in 'Report Agenti'
+    compare con 'Ore previste' = 0, e in AddLoginRows il suo orario atteso
+    ripiega su defaultStart perche' un turno non c'e'.
+    """
+    rep = check_sources(
+        turni_rows=[turni_row("Mario Rossi")],
+        case_owners={"SF_DATABASE": ["Mario Rossi", "Lucia Serafini"]},
+    )
+    f = _finding(rep, "casi ma senza turno")
+    assert f is not None and f.level == SEGNALA
+    assert f.details == ["lucia serafini (da SF_DATABASE)"]
+    assert "Ore previste" in f.hint
+    assert rep.ok
+
+
+def test_grafie_diverse_non_diventano_falsi_positivi():
+    """Il roster scrive 'Eleonora Rosa Sissa', Salesforce 'Eleonora Sissa'.
+
+    Senza la tabella alias questo controllo segnalerebbe quattro persone che
+    hanno il loro turno — e il rumore fa ignorare i controlli.
+    """
+    rep = check_sources(
+        turni_rows=[turni_row("Eleonora Rosa Sissa")],
+        case_owners={"SF_DATABASE": ["Eleonora Sissa"]},
+        aliases={"eleonora rosa sissa": "eleonora sissa"},
+    )
+    assert _finding(rep, "casi ma senza turno") is None
+
+
+def test_senza_alias_la_grafia_diversa_si_vede():
+    """Onesto in entrambe le direzioni: se la tabella alias non copre il caso,
+    il controllo lo dice invece di tacere."""
+    rep = check_sources(
+        turni_rows=[turni_row("Eleonora Rosa Sissa")],
+        case_owners={"SF_DATABASE": ["Eleonora Sissa"]},
+    )
+    assert _finding(rep, "casi ma senza turno") is not None

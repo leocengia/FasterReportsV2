@@ -434,8 +434,11 @@ def test_chi_ha_casi_ma_nessun_turno_viene_segnalato():
     )
     f = _finding(rep, "casi ma senza turno")
     assert f is not None and f.level == SEGNALA
-    assert f.details == ["lucia serafini (da SF_DATABASE)"]
+    # Il conteggio dei casi e' nel messaggio: e' quello che distingue un assente
+    # con la coda da smaltire da chi ha lavorato senza turno.
+    assert f.details == ["lucia serafini: 1 casi in SF_DATABASE"]
     assert "Ore previste" in f.hint
+    assert "in coda" in f.hint
     assert rep.ok
 
 

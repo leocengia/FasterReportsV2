@@ -1,5 +1,13 @@
 # FasterReportsV2
 
+> **Devi solo far girare il report?** → **[`MANUALE.md`](MANUALE.md)**, scritto per
+> chi lo usa e non deve conoscere il codice.
+>
+> **Devi modificarlo o aggiungerci qualcosa?** →
+> **[`docs/estendere.md`](docs/estendere.md)**.
+>
+> Il resto di questo file spiega com'e' fatto e perche'.
+
 Automazione dei report settimanali. Due report, un layer di ingestione in comune.
 
 - **Omni Report** — da sei fonti a workbook finito, con un comando.

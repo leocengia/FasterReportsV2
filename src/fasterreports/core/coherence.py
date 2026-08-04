@@ -437,13 +437,17 @@ def _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases) -> Non
         if r[0]:
             turni |= varianti(r[0])
 
-    senza: dict[str, set[str]] = {}
+    # Il CONTEGGIO dei casi, non solo i nomi: e' quello che distingue un assente
+    # con la coda da smaltire da qualcuno che ha lavorato senza turno. Senza il
+    # numero, chi legge deve aprire il file per sapere se importa.
+    senza: dict[str, dict[str, int]] = {}
     for fonte, nomi in case_owners.items():
         for nome in nomi:
             if not nome:
                 continue
             if not (varianti(nome) & turni):
-                senza.setdefault(normalize_name(nome), set()).add(fonte)
+                per_fonte = senza.setdefault(normalize_name(nome), {})
+                per_fonte[fonte] = per_fonte.get(fonte, 0) + 1
 
     if senza:
         rep.add(Finding(
@@ -451,15 +455,20 @@ def _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases) -> Non
             level=SEGNALA,
             summary=f"{len(senza)} nomi hanno lavorato casi ma non sono in 'Turni'",
             details=[
-                f"{nome} (da {', '.join(sorted(fonti))})"
+                f"{nome}: "
+                + ", ".join(f"{n} casi in {f}" for f, n in sorted(fonti.items()))
                 for nome, fonti in sorted(senza.items())
             ],
             hint=(
                 "In 'Report Agenti' avranno 'Ore previste' = 0 e nessuna\n"
                 "produttivita': non c'e' un turno con cui confrontare le ore.\n"
-                "Le regole sui casi li valutano, quelle sul turno no.\n"
-                "Normale se e' un altro team o un supervisore che ha coperto;\n"
-                "se invece sono del team, manca la loro riga nel roster."
+                "\n"
+                "Con POCHI casi (fino a ~5) e' NORMALE e non va corretto: sono\n"
+                "agenti assenti che avevano casi in coda, chiusi mentre erano via.\n"
+                "Nessuna ora prevista perche' davvero non lavoravano.\n"
+                "\n"
+                "Da guardare solo se i casi sono molti: allora la persona ha\n"
+                "lavorato davvero e la sua riga nel roster manca."
             ),
         ))
 

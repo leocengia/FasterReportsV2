@@ -91,6 +91,8 @@ def check_sources(
     week_inferred: tuple[int, int] | None = None,
     case_owners: dict[str, list] | None = None,
     aliases: dict[str, str] | None = None,
+    row_limits: list | None = None,
+    last_rows: dict[str, int] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -128,6 +130,9 @@ def check_sources(
 
     if case_owners and turni_rows is not None:
         _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases)
+
+    if row_limits is not None and last_rows:
+        _check_row_limits(rep, row_limits, last_rows)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -404,6 +409,69 @@ def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
 
 
 # --- 3. insiemi di agenti --------------------------------------------------
+
+# Sopra questa quota di riempimento si segnala: il limite non morde ancora, ma la
+# settimana in cui mordera' non si vuole scoprirla dai numeri.
+SOGLIA_ATTENZIONE = 0.8
+
+
+def _check_row_limits(rep, row_limits, last_rows: dict[str, int]) -> None:
+    """Le righe scritte stanno dentro i limiti scritti nelle formule?
+
+    Molte formule del template leggono intervalli con la riga finale dentro la
+    formula (`SUMIFS(AT_DATASET!$P$2:$P$130000, ...)`). Superarla non produce un
+    errore: produce **conteggi e medie su un sottoinsieme**, cioe' numeri
+    plausibili e piu' bassi del vero.
+
+    E' l'unico guasto di questo progetto che arriva **da solo**, senza che nessuno
+    tocchi niente: basta che il volume cresca. Per questo il controllo non aspetta
+    il superamento — segnala già all'80%, così il margine si allarga quando c'e'
+    tempo e non nella settimana in cui i numeri sono già sbagliati.
+    """
+    from .templatescan import binding_limits
+
+    vincolanti = binding_limits(list(row_limits))
+    for ds, ultima in sorted(last_rows.items()):
+        lim = vincolanti.get(ds)
+        if lim is None or not ultima:
+            continue
+        tutti = sorted(
+            (l for l in row_limits if l.dataset == ds), key=lambda l: l.max_row
+        )
+        dettagli = [str(l) for l in tutti if l.max_row < ultima * 2]
+        if ultima > lim.max_row:
+            rep.add(Finding(
+                check=f"formule troppo corte per {ds}",
+                level=BLOCCA,
+                summary=(
+                    f"i dati arrivano a riga {ultima}, ma le formule si fermano a "
+                    f"{lim.max_row}"
+                ),
+                details=dettagli or [str(lim)],
+                hint=(
+                    "Le righe oltre il limite NON entrano nei calcoli, e non c'e'\n"
+                    "nessun errore: escono conteggi e medie su un sottoinsieme.\n"
+                    "Allarga l'intervallo nelle formule elencate, oppure — meglio —\n"
+                    "riscrivile su colonna intera o sulla tabella, che si\n"
+                    "ridimensiona da se' a ogni build. Vedi docs/estendere.md."
+                ),
+            ))
+        elif ultima > lim.max_row * SOGLIA_ATTENZIONE:
+            rep.add(Finding(
+                check=f"formule vicine al limite per {ds}",
+                level=SEGNALA,
+                summary=(
+                    f"{ultima} righe su un limite di {lim.max_row} "
+                    f"({ultima / lim.max_row:.0%})"
+                ),
+                details=dettagli or [str(lim)],
+                hint=(
+                    "Non morde ancora. Ma quando mordera' non lo dira' nessuno:\n"
+                    "le righe in eccesso resteranno fuori dai calcoli in silenzio.\n"
+                    "Conviene allargare adesso, che c'e' tempo."
+                ),
+            ))
+
 
 def _check_case_owners_senza_turno(rep, case_owners, turni_rows, aliases) -> None:
     """Chi ha lavorato casi e non ha un turno nel roster.

@@ -40,10 +40,20 @@ class BuildResult:
     report: PreflightReport
     writes: list[WriteResult] = field(default_factory=list)
     macro_ran: bool = False
+    # Celle che dopo il ricalcolo contengono un errore Excel. Il workbook esiste,
+    # ma con #SPILL!/#REF!/#VALUE! dentro i suoi numeri non sono affidabili: va
+    # detto, non lasciato scoprire a chi lo apre.
+    error_cells: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
-        return self.workbook is not None and self.report.ok
+        return (
+            self.workbook is not None and self.report.ok and not self.error_cells
+        )
+
+    @property
+    def n_errors(self) -> int:
+        return sum(e.total for e in self.error_cells)
 
 
 def _open_source(contract: Contract, settings: Settings, dataset, ctx: dict):
@@ -293,6 +303,8 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         include_marked=settings.sources.include_marked_skills,
         aliases_available=bool(ctx.get("aliases")),
         aliases=ctx.get("aliases"),
+        row_limits=_row_limits(contract, settings),
+        last_rows=_last_rows(contract, blocks),
     )
 
 
@@ -329,6 +341,36 @@ def _assert_vba_compilabile(template) -> None:
             f"  copia tutto e incollalo sul modulo (Alt+F11, Ctrl+A, incolla).\n"
             f"  Poi:  omni-report check"
         )
+
+
+def _row_limits(contract: Contract, settings: Settings) -> list | None:
+    """I limiti di riga scritti nelle formule del template.
+
+    Senza template non si puo' sapere, e non si inventa: si restituisce None e il
+    controllo si salta.
+    """
+    if not settings.template.is_file():
+        return None
+    from ..core.templatescan import scan_row_limits
+
+    try:
+        return scan_row_limits(settings.template, tuple(contract.datasets))
+    except PipelineError:
+        return None
+
+
+def _last_rows(contract: Contract, blocks: dict) -> dict[str, int]:
+    """Ultima riga del FOGLIO che ciascun dataset occupera'.
+
+    Non il numero di righe: la riga di Excel, intestazione compresa — e' quello
+    che i limiti nelle formule esprimono.
+    """
+    out: dict[str, int] = {}
+    for nome, block in blocks.items():
+        if not block.rows:
+            continue
+        out[nome] = contract.dataset(nome).header_row + len(block.rows)
+    return out
 
 
 def _case_owners(contract: Contract, blocks: dict) -> dict[str, list]:
@@ -498,12 +540,25 @@ def build(
         if app is not None:
             app.quit()
 
+    # Il workbook e' salvato: ora si guarda com'e' venuto. E' la controparte del
+    # preflight — quello controlla cio' che entra, questo cio' che e' uscito, e
+    # vede una famiglia di guasti che sulle sorgenti non e' visibile (un array
+    # dinamico senza spazio per espandersi, una formula che legge uno spill
+    # rimasto vuoto).
+    from ..core.templatescan import scan_error_cells
+
+    try:
+        errori = scan_error_cells(out_path)
+    except PipelineError:
+        errori = []
+
     return BuildResult(
         workbook=out_path,
         preflight=preflight_path,
         report=report,
         writes=writes,
         macro_ran=macro_ran,
+        error_cells=errori,
     )
 
 

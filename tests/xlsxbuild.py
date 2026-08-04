@@ -46,7 +46,13 @@ def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
     for ref, val in grid.items():
         col = "".join(c for c in ref if c.isalpha())
         num = int("".join(c for c in ref if c.isdigit()))
-        if isinstance(val, bool):
+        if isinstance(val, str) and val.startswith("="):
+            # Una FORMULA, non testo: va in <f>, che e' dove la cercano gli
+            # strumenti che analizzano il workbook. Scritta come testo, un test
+            # sui riferimenti nelle formule sarebbe verde su un file che non ne
+            # contiene nessuna.
+            cell = f'<c r="{ref}"><f>{esc(val[1:])}</f></c>'
+        elif isinstance(val, bool):
             cell = f'<c r="{ref}" t="b"><v>{int(val)}</v></c>'
         elif isinstance(val, (int, float)):
             cell = f'<c r="{ref}"><v>{val}</v></c>'

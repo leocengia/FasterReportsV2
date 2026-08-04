@@ -53,7 +53,7 @@ Vedi "Il test golden" più sotto.
 
 ## Le regole che non si negoziano
 
-Sono cinque, e ognuna viene da un guasto vero.
+Sono sei, e ognuna viene da un guasto vero.
 
 ### 1. Le colonne si cercano per nome, mai per posizione
 
@@ -79,19 +79,38 @@ formule reali del workbook. Se aggiungi una formula che legge una colonna non
 dichiarata, il test lo segnala. Se togli l'ultima formula che leggeva una
 colonna, sai che quella colonna non serve più.
 
-### 3. Non usare openpyxl per scrivere
+### 3. Nelle formule, mai una riga finale scritta a mano
+
+Questa e' l'unica regola che protegge da un guasto che **arriva da solo**: non
+serve che nessuno tocchi niente, basta che il volume cresca.
+
+```
+NO   SUMIFS(AT_DATASET!$P$2:$P$130000, ...)     si ferma a 130000, e non lo dice
+SI   SUMIFS(AT_DATASET!$P:$P, ...)              colonna intera, nessun limite
+SI   SUMIFS(AHT_Data[Case AHT (mins)], ...)     la tabella si ridimensiona da se'
+```
+
+Superare il limite non produce un errore: produce **medie e conteggi su un
+sottoinsieme**. Preferisci la tabella (`AHT_Data[...]`) quando esiste, la colonna
+intera altrimenti.
+
+Il preflight scansiona le formule del template e confronta i limiti che trova con
+le righe che sta per scrivere: segnala all'80%, blocca al superamento. Ma la
+difesa migliore e' non introdurne di nuovi.
+
+### 4. Non usare openpyxl per scrivere
 
 Distrugge le formule ad array dinamico e va in out-of-memory sui file grossi.
 Per scrivere si usa **xlwings con Excel vero**; per leggere offline c'è
 `core\xlsxsource.py`, che legge l'XML dentro lo zip.
 
-### 4. Non ricalcolare con LibreOffice
+### 5. Non ricalcolare con LibreOffice
 
 Non valuta `_xlfn.XLOOKUP`. Il ricalcolo deve passare da Excel desktop, con
 `CalculateFullRebuild()` — non un `calculate()` semplice, perché `INDIRECT`
 rende le formule volatili.
 
-### 5. Il VBA non si modifica riscrivendo il file
+### 6. Il VBA non si modifica riscrivendo il file
 
 `xl\vbaProject.bin` contiene il sorgente **e il p-code compilato**. Cambiando
 solo il testo si ottiene un file che *sembra* patchato e continua a eseguire il

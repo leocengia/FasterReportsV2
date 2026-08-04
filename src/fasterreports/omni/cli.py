@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "build":
             result = build(contract, settings, args.week, week_number=week_number, only=only)
-            if not result.ok:
+            if result.workbook is None:
                 print(result.report.render(), file=sys.stderr)
                 print(f"\nBLOCCATO. Dettagli in: {result.preflight}", file=sys.stderr)
                 return 1
@@ -154,6 +154,31 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"      ! {warn}")
             print(f"Macro {'eseguita' if result.macro_ran else 'NON eseguita'}.")
             print(f"\nFatto: {result.workbook}")
+
+            # Il workbook c'e' ma potrebbe contenere errori di calcolo: si dice, e
+            # si esce con codice diverso da zero. Un file con dentro #SPILL! o
+            # #REF! e' peggio di un file che manca, perche' viene archiviato.
+            if result.error_cells:
+                print(
+                    f"\nATTENZIONE: {result.n_errors} celle contengono un errore "
+                    f"di calcolo.",
+                    file=sys.stderr,
+                )
+                for e in result.error_cells:
+                    print(f"  {e}", file=sys.stderr)
+                print(
+                    "\n  I numeri di questi fogli non sono affidabili. Cause tipiche:\n"
+                    "    #SPILL!  un array dinamico non ha spazio per espandersi\n"
+                    "             (succede quando agenti o casi crescono)\n"
+                    "    #REF!    una formula legge lo spill di un'altra rimasta vuota\n"
+                    "    #VALUE!  una media o un quartile su un insieme vuoto\n"
+                    "    #N/D     un XLOOKUP che non trova: spesso un nome che non\n"
+                    "             fa match, o una colonna sorgente non riempita\n"
+                    "  Guarda prima il foglio con piu' errori: gli altri di solito\n"
+                    "  sono conseguenze sue.",
+                    file=sys.stderr,
+                )
+                return 1
             return 0
 
     except PipelineError as exc:

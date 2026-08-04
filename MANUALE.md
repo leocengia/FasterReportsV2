@@ -282,6 +282,19 @@ FT sia PT) ed è una colonna **informativa: nessun calcolo la usa**. Se vuoi
 riempirla, la mappa è `config\contratti.yml`. Se non ti interessa, ignora questa
 riga per sempre.
 
+### `formule vicine al limite per <fonte>`
+Alcune formule del workbook leggono intervalli con la riga finale scritta dentro
+(`SUMIFS(AT_DATASET!$P$2:$P$130000, ...)`). Questa riga dice che i dati stanno
+arrivando a quel limite — l'80% o piu'.
+
+**Non c'e' niente di rotto adesso.** Ma il giorno in cui il limite verra' superato,
+le righe in eccesso resteranno **fuori dai calcoli senza nessun errore**: medie e
+conteggi su un sottoinsieme, numeri plausibili e piu' bassi del vero. Conviene
+allargare quando la segnalazione compare, non quando i numeri sono già sbagliati.
+
+Se il limite e' già superato la riga diventa `[BLOCCA] formule troppo corte`, ed
+elenca quali formule vanno allargate.
+
 ### `settimana dedotta dai dati` / `settimana scelta`
 Conferme. La seconda dice anche quante righe di `AT_DATASET` cadono dentro la
 settimana: devono essere tutte.
@@ -377,6 +390,32 @@ Due cose che sembrano errori e non lo sono:
   regole basate sui casi, dove una data non c'è. Era così anche prima.
 - in `AT_DATASET` la numerazione della colonna `A` continua oltre l'ultima riga
   di dati: è un residuo del template, inerte — niente lo legge.
+
+### Le celle di errore, che il programma controlla da sé
+
+Dopo il salvataggio il programma rilegge il workbook e cerca le celle con un
+errore di calcolo. Se ne trova, lo stampa e **esce con errore**, anche se il file
+e' stato prodotto:
+
+```
+ATTENZIONE: 116 celle contengono un errore di calcolo.
+  AHT Outliers Export: 73 #REF! (es. L3, N3, L4, N4, L5)
+  Verifica AHT: 37 #REF! (es. H29, H30, H31, H32, H33)
+  AHT Outliers: 6 #VALUE! (es. K11, M11, N11, O11, P11)
+```
+
+Cosa significano:
+
+| errore | causa tipica |
+|---|---|
+| `#SPILL!` | un array dinamico non ha spazio per espandersi — succede **quando i dati crescono** |
+| `#REF!` | una formula legge il risultato di un'altra che e' rimasta vuota |
+| `#VALUE!` | una media o un quartile su un insieme vuoto |
+| `#N/D` | un XLOOKUP che non trova: un nome che non fa match, o una colonna sorgente non riempita |
+
+**Guarda prima il foglio con piu' errori**: gli altri di solito sono conseguenze
+sue. Nell'esempio sopra tutte e 116 le celle venivano da due colonne di
+`SF_DATABASE` che la pipeline non riempiva.
 
 ### Il confronto con un file fatto a mano
 

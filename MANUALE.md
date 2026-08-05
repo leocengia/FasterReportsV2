@@ -70,13 +70,29 @@ Serve un PC **Windows con Excel desktop installato**. Non funziona su Excel
 online né su un Mac senza Excel: le formule ad array e il VBA li deve valutare
 Excel vero.
 
+### La via semplice: `installa.bat`
+
+Doppio clic su **`installa.bat`**, nella cartella del progetto. Controlla se
+Python c'è, se non c'è prova a installarlo da solo, e poi installa quello che
+serve al programma. Va fatto **una volta per PC**.
+
+Se durante l'installazione di Python compare la richiesta "chiudi e rilancia":
+chiudi davvero la finestra e fai di nuovo doppio clic su `installa.bat` — Windows
+deve aggiornare le sue impostazioni prima che il resto funzioni.
+
+Se qualcosa va storto, la finestra lo dice in chiaro e non si chiude da sola:
+leggi il messaggio, e se resti bloccato manda uno screenshot di quella finestra
+a chi ti ha dato il programma.
+
+### La via manuale, se preferisci la riga di comando
+
 ```bash
 git clone <indirizzo del repository>
 cd "Faster Reports v2"
 pip install -e ".[excel]"
 ```
 
-Poi verifica:
+### In entrambi i casi, verifica
 
 ```bash
 omni-report check
@@ -543,6 +559,11 @@ cambia i nomi delle colonne o quando serve una colonna nuova — vedi
 ---
 
 ## 10. Quando qualcosa va storto
+
+### «Python non è stato trovato; eseguire senza argomenti da installare dal Microsoft Store...»
+Non è un errore del programma: significa che su questo PC **non c'è un Python
+vero**. Fai doppio clic su `installa.bat` — prova a installarlo da solo. Se non
+l'hai ancora fatto su questo PC, è sempre il primo passo (capitolo 2).
 
 ### «nessun file corrisponde a `Turni*`»
 Il file non è in `input\`, o si chiama diversamente da come lo aspetta

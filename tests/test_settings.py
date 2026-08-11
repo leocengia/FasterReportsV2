@@ -15,7 +15,7 @@ import pytest
 
 from fasterreports.core.errors import ContractError, SourceError
 from fasterreports.omni.orchestrate import _source_label
-from fasterreports.omni.settings import Settings
+from fasterreports.omni.settings import Settings, load_settings
 
 
 def make_settings(tmp_path, input_files, *, subdir="input") -> Settings:
@@ -131,3 +131,75 @@ def test_source_label_file_presente(tmp_path):
     s = make_settings(tmp_path, {"AT_DATASET": "AT DATASET*"})
     (s.input_dir / "AT DATASET W31.xlsx").touch()
     assert _source_label(s, "AT_DATASET").endswith("AT DATASET W31.xlsx")
+
+
+# ---------------------------------------------------------------------------
+# load_settings: gli stessi errori parlanti anche sugli YAML malformati
+#
+# `sources.skills` e `sources.backoffice_sections` finivano dentro `tuple(...)`
+# senza controllare che il valore fosse gia' una lista. Una stringa e'
+# iterabile carattere per carattere: `skills: "HPO"` invece di
+# `skills: ["HPO"]` produceva `('H', 'P', 'O')` — un filtro completamente
+# sbagliato, senza che nessun errore lo segnalasse. Bug reale, non ipotetico.
+# ---------------------------------------------------------------------------
+
+
+def _scrivi_settings(tmp_path, corpo_sources: str) -> Path:
+    p = tmp_path / "settings.yml"
+    p.write_text(f"sources:\n{corpo_sources}\n", encoding="utf-8")
+    return p
+
+
+def test_skills_stringa_nuda_blocca_con_lerrore_giusto(tmp_path):
+    p = _scrivi_settings(tmp_path, '  skills: "HPO"')
+    with pytest.raises(ContractError) as e:
+        load_settings(p, root=tmp_path)
+    msg = str(e.value)
+    assert "sources.skills" in msg
+    assert '["HPO"]' in msg  # mostra la forma corretta, non solo l'errore
+
+
+def test_skills_lista_funziona_come_sempre(tmp_path):
+    p = _scrivi_settings(tmp_path, '  skills: ["HPO", "RETAIL"]')
+    s = load_settings(p, root=tmp_path)
+    assert s.sources.skills == ("HPO", "RETAIL")
+
+
+def test_skills_assente_usa_il_default(tmp_path):
+    p = tmp_path / "settings.yml"
+    p.write_text("{}\n", encoding="utf-8")
+    s = load_settings(p, root=tmp_path)
+    assert s.sources.skills == ("HPO",)
+
+
+def test_backoffice_sections_stringa_nuda_blocca(tmp_path):
+    p = _scrivi_settings(tmp_path, '  backoffice_sections: "HPO"')
+    with pytest.raises(ContractError) as e:
+        load_settings(p, root=tmp_path)
+    assert "sources.backoffice_sections" in str(e.value)
+
+
+def test_backoffice_sections_lista_funziona_come_sempre(tmp_path):
+    p = _scrivi_settings(tmp_path, '  backoffice_sections: ["HPO", "Part-Time 6h"]')
+    s = load_settings(p, root=tmp_path)
+    assert s.sources.backoffice_sections == ("HPO", "Part-Time 6h")
+
+
+def test_monday_serial_non_numerico_da_contracterror_non_valueerror(tmp_path):
+    p = _scrivi_settings(tmp_path, "  monday_serial: non-un-numero")
+    with pytest.raises(ContractError) as e:
+        load_settings(p, root=tmp_path)
+    assert "sources.monday_serial" in str(e.value)
+
+
+def test_monday_serial_numerico_funziona(tmp_path):
+    p = _scrivi_settings(tmp_path, "  monday_serial: 46223")
+    s = load_settings(p, root=tmp_path)
+    assert s.sources.monday_serial == 46223
+
+
+def test_monday_serial_assente_e_none(tmp_path):
+    p = tmp_path / "settings.yml"
+    p.write_text("{}\n", encoding="utf-8")
+    s = load_settings(p, root=tmp_path)
+    assert s.sources.monday_serial is None

@@ -292,7 +292,10 @@ def read_roster(
     anche il marcato.
     """
     path = Path(path)
-    sheet = read_sheet(path, sheet_name or _pick_sheet(path, ROSTER_SHEET))
+    try:
+        sheet = read_sheet(path, sheet_name or _pick_sheet(path, ROSTER_SHEET))
+    except SourceError as exc:
+        raise _sheet_error_con_hint(exc, sheet_name, "sources.roster_sheet") from None
     notes = SourceNotes(stale_cache=bool(sheet.n_formulas and not sheet.calc_chain_present))
     header_row = find_header_row(sheet, ROSTER_KEYS)
     blocks = find_roster_blocks(sheet, header_row)
@@ -457,7 +460,10 @@ def read_backoffice(
     `CreaMalpractice.LoadSlots`. Vedi `read_alias_map`.
     """
     path = Path(path)
-    sheet = read_sheet(path, sheet_name or _pick_sheet(path, BACKOFFICE_SHEET))
+    try:
+        sheet = read_sheet(path, sheet_name or _pick_sheet(path, BACKOFFICE_SHEET))
+    except SourceError as exc:
+        raise _sheet_error_con_hint(exc, sheet_name, "sources.backoffice_sheet") from None
     notes = SourceNotes(stale_cache=bool(sheet.n_formulas and not sheet.calc_chain_present))
 
     header_row = _find_backoffice_header(sheet)
@@ -618,6 +624,21 @@ def _pick_sheet(path: Path, preferred: str) -> str:
     if preferred in names:
         return preferred
     return names[0]
+
+
+def _sheet_error_con_hint(exc: SourceError, sheet_name: str | None, chiave: str) -> SourceError:
+    """Se il nome del foglio veniva da `settings.yml`, lo dice.
+
+    Senza questo, un nome sbagliato in `sources.roster_sheet` (o
+    `backoffice_sheet`) fallisce con l'errore di `xlsxsource` — corretto (dice
+    il nome cercato e i fogli presenti) ma non dice **dove** e' stato scritto
+    quel nome. Solo quando il nome e' stato scelto esplicitamente (non quando
+    e' `_pick_sheet` ad averlo indovinato da solo) l'hint ha senso: altrimenti
+    punterebbe a un'impostazione che non e' la causa.
+    """
+    if sheet_name is None:
+        return exc
+    return SourceError(f"{exc}\n  Il nome del foglio si cambia in config/settings.yml -> {chiave}.")
 
 
 def week_bounds(monday_serial: int) -> tuple[date, date]:

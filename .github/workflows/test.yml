@@ -1,0 +1,24 @@
+# Solo pytest: nessun Excel, nessun xlwings. La suite gira gia' cosi' in
+# locale (l'ambiente di sviluppo di questo progetto non ha Excel), quindi la
+# CI vede esattamente quello che vede chi scrive il codice — niente di piu',
+# niente di meno.
+#
+# Cosa NON verifica: tutto cio' che serve un Excel vero (scrittura via
+# xlwings, macro VBA, ricalcolo). Quella parte resta un collaudo manuale
+# sull'unica macchina Windows con Excel — vedi docs/estendere.md.
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: pytest

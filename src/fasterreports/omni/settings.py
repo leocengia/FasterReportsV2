@@ -115,6 +115,43 @@ class Settings:
         )
 
 
+def _str_tuple(value, campo: str) -> tuple[str, ...] | None:
+    """Una lista di stringhe da YAML — mai una stringa nuda.
+
+    Bug reale, non ipotetico: una stringa e' iterabile carattere per carattere,
+    quindi `tuple("HPO")` da' `('H', 'P', 'O')` senza nessun errore. Chi scrive
+    `skills: HPO` invece di `skills: ["HPO"]` otterrebbe un filtro completamente
+    sbagliato — e nessun messaggio direbbe perche', perche' tecnicamente non e'
+    successo nessun errore Python.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raise ContractError(
+            f"settings.yml: {campo} deve essere una LISTA, non una stringa "
+            f"({value!r}).\n"
+            f"  Scritto cosi':      {campo}: [\"{value}\"]\n"
+            f"  non cosi':          {campo}: {value}\n"
+            f"  Una stringa e' iterabile carattere per carattere: senza questo "
+            f"controllo il filtro diventerebbe sbagliato senza che nessun "
+            f"errore lo segnali."
+        )
+    return tuple(str(v) for v in value)
+
+
+def _int_or_none(value, campo: str) -> int | None:
+    """Come `int(...)`, ma con un `ContractError` invece di un `ValueError` nudo."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ContractError(
+            f"settings.yml: {campo} deve essere un numero intero (il seriale "
+            f"Excel del lunedi' della settimana), non {value!r}."
+        ) from None
+
+
 def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
     path = Path(path)
     if not path.is_file():
@@ -148,14 +185,14 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
 
     src = raw.get("sources") or {}
     sources = SourceSettings(
-        skills=tuple(src.get("skills") or ("HPO",)),
+        skills=_str_tuple(src.get("skills"), "sources.skills") or ("HPO",),
         include_marked_skills=bool(src.get("include_marked_skills", False)),
         roster_sheet=src.get("roster_sheet") or None,
         backoffice_sheet=src.get("backoffice_sheet") or None,
-        backoffice_sections=(
-            tuple(src["backoffice_sections"]) if src.get("backoffice_sections") else None
+        backoffice_sections=_str_tuple(
+            src.get("backoffice_sections"), "sources.backoffice_sections"
         ),
-        monday_serial=(int(src["monday_serial"]) if src.get("monday_serial") else None),
+        monday_serial=_int_or_none(src.get("monday_serial"), "sources.monday_serial"),
     )
 
     # La mappa dei contratti è un file a parte: è dato HR, cambia con altri

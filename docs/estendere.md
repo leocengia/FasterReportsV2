@@ -191,6 +191,46 @@ Se la fonte ha una forma diversa da queste due (per esempio un JSON), serve un
 lettore nuovo in `core\`: deve restituire la stessa coppia `(headers, rows)` di
 `read_csv`, e da lì tutto il resto della pipeline funziona senza modifiche.
 
+### Rendere una fonte opzionale
+
+Il caso: una fonte può mancare in alcune settimane per motivi legittimi (nessuna
+risposta a un sondaggio, un export saltato per festività) e non deve fermare il
+resto del report. Oggi solo `PSAT_DATASET` è così, deciso dopo che l'export dei
+sondaggi non esisteva per l'intera W32.
+
+**Prima di farlo, la domanda che conta:** apri `config\columns.yml` e guarda i
+`consumers` di ogni campo del dataset. Se anche uno solo comincia per
+`VBA:...`, **quella fonte non può essere opzionale** — il caricamento del
+contratto lo impedisce da sé, con un `ContractError` che nomina la funzione VBA
+che la consuma. Il motivo: se il VBA legge una colonna che quella settimana è
+rimasta vuota, il risultato non è "assente", è **sbagliato senza dirlo** — il
+contrario esatto di ciò per cui questo meccanismo esiste.
+
+Se il controllo passa (nessun consumatore VBA):
+
+```yaml
+PSAT_DATASET:
+  sheet: PSAT_DATASET
+  header_row: 1
+  data_start_col: A
+  optional: true    # <-- qui
+  fields: [...]
+```
+
+Cosa cambia, in pratica:
+
+- se il file non c'è, il preflight scrive `STATO: SALTATO` (non `BLOCCATO`) e il
+  report continua a generarsi;
+- il foglio viene comunque scritto **vuoto**: `write_block` gira anche su un
+  blocco a zero righe, quindi pulisce quello che c'era (un residuo della
+  settimana prima, per esempio) invece di lasciarlo lì. Un foglio saltato senza
+  scrivere nulla sarebbe un guasto silenzioso identico a quello che il progetto
+  combatte ovunque altro — solo travestito da comodità;
+- se il file **c'è** ma ha le colonne sbagliate, blocca comunque, esattamente
+  come per qualunque altra fonte: `optional` copre solo "il file non c'è", non
+  "il file è messo male". Le due situazioni non sono la stessa cosa e non vanno
+  confuse — la seconda è quasi sempre un errore di chi ha esportato.
+
 ### Aggiungere una regola di malpractice
 
 Zona rossa: si tocca il VBA. Ordine obbligatorio.

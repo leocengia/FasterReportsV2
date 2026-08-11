@@ -40,7 +40,7 @@ Sei file in ingresso, un workbook in uscita.
 | `AT DATASET W<NN>.xlsx` | stati agente da Amazon Connect | foglio `AT_DATASET` |
 | `ATwi DATASET W<NN>.xlsx` | tempi di gestione contatti | foglio `ATwi_DATASET` |
 | `SF DATABASE W<NN>.csv` | casi Salesforce | foglio `SF_DATABASE` |
-| `PSAT DATASET W<NN>.csv` | sondaggi di soddisfazione | foglio `PSAT_DATASET` |
+| `PSAT DATASET W<NN>.csv` | sondaggi di soddisfazione | foglio `PSAT_DATASET` (**opzionale**: se manca, si procede lo stesso — vedi capitolo 4) |
 | `Turni ....xlsx` | roster WFM | foglio `Turni` |
 | `Back Office ....xlsx` | slot di back office | foglio `Slot Only Cases` |
 
@@ -197,7 +197,12 @@ tutto. Se non sono quelli che ti aspetti, hai scaricato l'export sbagliato.
 
 Cosa guardare:
 
-- **`STATO`**: `OK` o `BLOCCATO`. Se è bloccato, il perché è sotto.
+- **`STATO`**: `OK`, `BLOCCATO`, oppure `SALTATO (fonte opzionale, assente
+  questa settimana)`. Oggi solo `PSAT_DATASET` può dare questo terzo stato:
+  se l'export dei sondaggi non c'è, il foglio viene scritto **vuoto** (non
+  lasciato con i dati della settimana prima) e il resto del report procede
+  normalmente — nessuna regola di malpractice legge quella fonte. Le altre
+  cinque fonti non hanno questa possibilità: se mancano, bloccano sempre.
 - **`via`**: come è stata trovata la colonna. `esatto` è il caso normale.
   `alias` o `normalizzato` significa che l'export ha cambiato il nome della
   colonna e il programma l'ha ritrovata comunque: funziona, ma **è un
@@ -564,6 +569,18 @@ cambia i nomi delle colonne o quando serve una colonna nuova — vedi
 Non è un errore del programma: significa che su questo PC **non c'è un Python
 vero**. Fai doppio clic su `installa.bat` — prova a installarlo da solo. Se non
 l'hai ancora fatto su questo PC, è sempre il primo passo (capitolo 2).
+
+### Manca il file dei PSAT (sondaggi)
+Non è un problema: `PSAT_DATASET` è l'unica fonte **opzionale**. Se l'export non
+c'è (nessuna risposta ai sondaggi quella settimana, o il file non è ancora
+arrivato), il preflight mostra `STATO: SALTATO` invece di `BLOCCATO` e il resto
+del report — inclusa `Dettaglio Malpractice` — si genera normalmente. Il foglio
+`PSAT_DATASET` nel workbook prodotto sarà vuoto, e con lui `Recap PSAT Positive`
+e `PSAT Positive Export`: non è un errore, è la settimana senza dati.
+
+Se invece il file **c'è** ma con le colonne sbagliate, quello blocca comunque
+come tutte le altre fonti — "opzionale" vale solo per "il file non c'è", non per
+"il file è messo male".
 
 ### «nessun file corrisponde a `Turni*`»
 Il file non è in `input\`, o si chiama diversamente da come lo aspetta

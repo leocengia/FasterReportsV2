@@ -129,6 +129,25 @@ def _dataset_order(contract: Contract) -> list:
     )
 
 
+def _empty_block(dataset) -> Block:
+    """Il blocco di un dataset opzionale la cui fonte manca.
+
+    Zero righe, ma un Block vero: passa dallo stesso `write_block` di tutti gli
+    altri, che quindi PULISCE il foglio (`_clear_data` gira comunque) e non ci
+    scrive nulla sopra. E' la differenza fra "vuoto perche' cosi' deve essere"
+    e "vuoto per omissione, con sotto i dati della settimana prima".
+    """
+    from ..core.contract import index_to_col
+
+    return Block(
+        dataset=dataset.name,
+        start_col=index_to_col(dataset.start_index),
+        end_col=index_to_col(dataset.last_input_index),
+        rows=[],
+        stats={},
+    )
+
+
 def _source_label(settings: Settings, dataset: str) -> str:
     """Da dove *doveva* arrivare il dataset, senza poter fallire.
 
@@ -186,6 +205,22 @@ def run_preflight(
             source = _open_source(contract, settings, dataset, ctx)
         except PipelineError as exc:
             from ..core.preflight import DatasetReport
+
+            if dataset.optional:
+                # La fonte non c'e', ma il dataset e' dichiarato opzionale (nel
+                # contratto, con la prova che nessuna formula del VBA lo legge):
+                # si segnala forte e si procede. Il blocco vuoto e' cio' che fa
+                # scrivere il foglio VUOTO invece di lasciarlo saltato — un
+                # residuo della settimana scorsa nel template sarebbe un
+                # report sbagliato, non uno che manca.
+                report.datasets.append(DatasetReport(
+                    name=name,
+                    source=_source_label(settings, name),
+                    skipped_reason=str(exc),
+                ))
+                if build_blocks:
+                    blocks[name] = _empty_block(dataset)
+                continue
 
             report.datasets.append(
                 DatasetReport(name=name, source=_source_label(settings, name), error=str(exc))

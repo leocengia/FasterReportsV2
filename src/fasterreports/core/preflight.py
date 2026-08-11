@@ -31,6 +31,11 @@ class DatasetReport:
     # Osservazioni del lettore (solo sorgenti WFM): skill viste, marcatori,
     # righe saltate. Non sono errori, ma vanno riportate.
     notes: object | None = None
+    # Popolato SOLO per un dataset `optional: true` la cui fonte non c'e'. A
+    # differenza di `error`, non fa fallire il preflight: il foglio viene
+    # comunque scritto, vuoto. Va comunque mostrato in chiaro — un'assenza
+    # taciuta e' quanto di piu' lontano dal principio del progetto.
+    skipped_reason: str = ""
 
     @property
     def ok(self) -> bool:
@@ -93,6 +98,16 @@ class PreflightReport:
                 lines.append("  STATO: BLOCCATO")
                 for line in d.error.splitlines():
                     lines.append(f"  | {line}")
+                continue
+
+            if d.skipped_reason:
+                lines.append("  STATO: SALTATO (fonte opzionale, assente questa settimana)")
+                for line in d.skipped_reason.splitlines():
+                    lines.append(f"  | {line}")
+                lines.append(
+                    "  Il foglio viene scritto VUOTO: nessun dato di settimane "
+                    "precedenti resta dentro."
+                )
                 continue
 
             lines.append("  STATO: OK")

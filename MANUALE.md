@@ -167,6 +167,30 @@ sempre su una copia.
 
 Vedi capitolo 7. Sono tre controlli, due minuti.
 
+### (Opzionale) Farlo girare da solo, senza doppio clic
+
+`--week auto` (e `run_report.bat auto`) calcolano da soli il numero della
+settimana: **l'ultima settimana lunedì-domenica già conclusa**, contata dalla
+data di oggi. Non serve digitare niente, e non compare nessun prompt — utile
+per un'attività pianificata di Windows che lanci il report da sola, per
+esempio ogni lunedì mattina.
+
+Per registrarla:
+
+1. Apri **Utilità di pianificazione** (Task Scheduler) di Windows.
+2. **Crea attività di base** → un nome a piacere → **Settimanalmente**, il
+   giorno che preferisci (tipicamente lunedì, per il report della settimana
+   appena chiusa).
+3. Azione: **Avvia un programma**. Programma: il percorso completo di
+   `run_report.bat` in questa cartella. Argomenti: `auto`.
+4. Salva.
+
+**Attenzione**: l'attività genera il report solo se i sei file sono già in
+`input\` per quella settimana — non li scarica lei. Se mancano, il preflight
+blocca come sempre e non produce niente: non è un problema, ma nemmeno un
+sostituto dello scaricare i file. Controlla comunque `output\preflight_W<NN>.txt`
+la mattina dopo, per essere certo che sia andata bene.
+
 ---
 
 ## 4. Leggere il preflight
@@ -469,13 +493,24 @@ funziona e non si capisce perché.
 ### `omni-report preflight --week NN`
 Valida le sei fonti senza aprire Excel. Salva `output\preflight_W<NN>.txt`.
 
+`--week` accetta anche `auto`: l'ultima settimana lunedì-domenica già conclusa,
+calcolata dalla data di oggi. Serve a non dover digitare il numero — utile da
+un'attività pianificata (capitolo 3).
+
 ```
 --only DATASET [DATASET ...]   controlla solo alcune fonti
 --input DIR / --output DIR     altre cartelle
 ```
 
 ### `omni-report build --week NN`
-Il "pulsante". Richiede Excel.
+Il "pulsante". Richiede Excel. Accetta `--week auto` come sopra.
+
+Prima di scrivere, controlla che il file di output non sia già aperto in
+Excel (il lock `~$Omni_Report_W<NN>.xlsm`): se lo è, si ferma e lo dice, invece
+di rischiare un salvataggio a metà. E non tocca mai il file buono finché il
+lavoro non è finito con successo: scrive su una copia temporanea e la
+rinomina solo alla fine — un build interrotto a metà non lascia un file con il
+nome giusto e i dati sbagliati.
 
 ```
 --visible                      mostra Excel mentre lavora
@@ -596,6 +631,12 @@ Due settimane nella stessa cartella. Togli quella vecchia.
 Chiudi il processo Excel dal Task Manager e rilancia. Se succede sempre, lancia
 `omni-report check`: la voce `VBA compilabile` o `MsgBox silenziati` ti dirà se il
 template ha un problema che ferma la macro con una finestra invisibile.
+
+### «...è aperto in Excel (trovato il file di lock)»
+Qualcuno (forse tu, in un'altra finestra) ha il file di output di quella
+settimana ancora aperto in Excel. Chiudilo e rilancia. Il programma si ferma
+apposta prima di scrivere: sovrascrivere un file aperto darebbe un salvataggio
+a metà o un errore poco chiaro, non un avviso leggibile.
 
 ### Il preflight dice OK ma i numeri sembrano strani
 Fai i tre controlli del capitolo 7. Se `Helper Turni!N` è a zero il problema è il

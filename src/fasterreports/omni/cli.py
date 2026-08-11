@@ -23,7 +23,12 @@ DEFAULT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--week", required=True, help="numero settimana, es. 31")
+    p.add_argument(
+        "--week", required=True,
+        help="numero settimana, es. 31 (oppure 'auto': l'ultima settimana "
+             "lunedi'-domenica gia' conclusa — serve per lanciare il comando "
+             "senza il prompt interattivo, es. da un'attivita' pianificata)",
+    )
     p.add_argument("--input", type=Path, help="cartella sorgenti (default: input/)")
     p.add_argument("--output", type=Path, help="cartella di output (default: output/)")
     p.add_argument("--config", type=Path, help="cartella config (default: config/)")
@@ -82,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if hasattr(args, "week") and str(args.week).strip().lower() == "auto":
+        args.week = str(_settimana_auto())
     config_dir = args.config or DEFAULT_ROOT / "config"
 
     try:
@@ -195,6 +202,28 @@ def _replace(settings, **kw):
     from dataclasses import replace
 
     return replace(settings, **kw)
+
+
+def _settimana_auto(oggi=None) -> int:
+    """La settimana ISO dell'ultima settimana lunedi'-domenica GIA' CONCLUSA.
+
+    Definizione deterministica, indipendente dal giorno in cui si lancia:
+    lunedi' di questa settimana, meno 7 giorni. Questi report riguardano
+    sempre una settimana chiusa per intero — non ha senso generarli per una
+    settimana ancora in corso — quindi "la settimana scorsa" e' sempre la
+    risposta giusta, che si lanci di lunedi' o di venerdi'. Serve a
+    `--week auto`, che a sua volta serve per lanciare il comando senza il
+    prompt interattivo del numero di settimana (es. da un'attivita'
+    pianificata di Windows).
+
+    `oggi` e' un parametro solo per i test: senza, e' la data di oggi.
+    """
+    from datetime import date, timedelta
+
+    oggi = oggi or date.today()
+    lunedi_di_questa_settimana = oggi - timedelta(days=oggi.isoweekday() - 1)
+    settimana_scorsa = lunedi_di_questa_settimana - timedelta(days=7)
+    return settimana_scorsa.isocalendar()[1]
 
 
 def _week_number(value) -> int | None:

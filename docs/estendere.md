@@ -123,6 +123,16 @@ procedura**. Metterle dopo produce un modulo che si salva senza un lamento e
 viene rifiutato al momento dell'esecuzione. `omni-report check` ora lo verifica
 (voce `VBA compilabile`).
 
+### 7. `build()` non scrive mai direttamente su `out_path`
+
+Scrive su una copia temporanea (`_scrivi_con_copia_atomica` in
+`omni/orchestrate.py`) e la promuove al nome buono con `os.replace()` solo se
+tutto il resto e' andato a buon fine. Se aggiungi un passo nuovo al build
+(un'altra macro, un altro ricalcolo), mettilo **dentro** la funzione `scrivi`
+passata a `_scrivi_con_copia_atomica`, non dopo — altrimenti un fallimento in
+quel passo lascerebbe il file buono gia' scritto ma incompleto, esattamente il
+guasto che questo meccanismo esiste per evitare.
+
 ---
 
 ## Ricette

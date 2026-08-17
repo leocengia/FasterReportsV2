@@ -5,20 +5,30 @@ STATO: la parte di preflight/ingestione gira e ha test. La parte Excel
 docs/architettura.md §8.
 
 Ordine, e perche':
+  0. il file di output non deve essere aperto in Excel (lock `~$...`):
+     sovrascriverlo produrrebbe un salvataggio a meta' o un errore COM
+     poco chiaro.
   1. preflight su TUTTI i CSV, prima di aprire Excel. Aprire Excel per poi
      scoprire che manca una colonna costa 30 secondi e lascia processi appesi.
-  2. copia template -> output. Il template non viene mai aperto in scrittura:
-     se un run va male, resta intatto.
-  3. scrittura dei 4 dataset.
+  2. copia template (o il workbook esistente, per un giro parziale) -> una
+     copia TEMPORANEA, mai out_path direttamente (`_scrivi_con_copia_atomica`):
+     se un run va male a meta', out_path resta quello di prima.
+  3. scrittura dei dataset nella copia temporanea.
   4. ricalcolo completo. Le formule usano XLOOKUP/FILTER/UNIQUE in array e
      INDIRECT: volatili, un calculate() semplice non propaga sempre.
   5. macro malpractice, in modalita' silenziosa.
-  6. salva e chiudi, sempre, anche in caso di errore.
+  6. salva e chiudi, sempre, anche in caso di errore; le chiamate xlwings piu'
+     fragili (apertura, salvataggio) passano da `_con_retry`, che assorbe un
+     errore COM transitorio senza disturbare l'utente.
+  7. solo ora, con Excel chiuso e il salvataggio riuscito, la copia
+     temporanea prende il nome buono (`os.replace`, atomico).
 """
 
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -129,6 +139,25 @@ def _dataset_order(contract: Contract) -> list:
     )
 
 
+def _empty_block(dataset) -> Block:
+    """Il blocco di un dataset opzionale la cui fonte manca.
+
+    Zero righe, ma un Block vero: passa dallo stesso `write_block` di tutti gli
+    altri, che quindi PULISCE il foglio (`_clear_data` gira comunque) e non ci
+    scrive nulla sopra. E' la differenza fra "vuoto perche' cosi' deve essere"
+    e "vuoto per omissione, con sotto i dati della settimana prima".
+    """
+    from ..core.contract import index_to_col
+
+    return Block(
+        dataset=dataset.name,
+        start_col=index_to_col(dataset.start_index),
+        end_col=index_to_col(dataset.last_input_index),
+        rows=[],
+        stats={},
+    )
+
+
 def _source_label(settings: Settings, dataset: str) -> str:
     """Da dove *doveva* arrivare il dataset, senza poter fallire.
 
@@ -186,6 +215,22 @@ def run_preflight(
             source = _open_source(contract, settings, dataset, ctx)
         except PipelineError as exc:
             from ..core.preflight import DatasetReport
+
+            if dataset.optional:
+                # La fonte non c'e', ma il dataset e' dichiarato opzionale (nel
+                # contratto, con la prova che nessuna formula del VBA lo legge):
+                # si segnala forte e si procede. Il blocco vuoto e' cio' che fa
+                # scrivere il foglio VUOTO invece di lasciarlo saltato — un
+                # residuo della settimana scorsa nel template sarebbe un
+                # report sbagliato, non uno che manca.
+                report.datasets.append(DatasetReport(
+                    name=name,
+                    source=_source_label(settings, name),
+                    skipped_reason=str(exc),
+                ))
+                if build_blocks:
+                    blocks[name] = _empty_block(dataset)
+                continue
 
             report.datasets.append(
                 DatasetReport(name=name, source=_source_label(settings, name), error=str(exc))
@@ -444,6 +489,96 @@ def _read_email_agenti(template) -> set[str] | None:
     return out or None
 
 
+def _bloccato_da_excel(path: Path) -> bool:
+    """Il file `~$<nome>` che Excel crea quando un workbook e' aperto.
+
+    Non e' infallibile — un Excel schiantato puo' lasciare il lock orfano — ma
+    e' il segnale standard, e non richiede di aprire il file per scoprirlo.
+    Senza questo controllo, scrivere sopra un file che un collega ha ancora
+    aperto produce un salvataggio a meta' o un errore COM poco chiaro, invece
+    di un messaggio che dice semplicemente "chiudilo".
+    """
+    return path.with_name(f"~${path.name}").exists()
+
+
+def _tipi_com_transitori() -> tuple[type[BaseException], ...]:
+    """I tipi di eccezione COM da ritentare, se esistono su questa macchina.
+
+    Senza pywin32 (qui in sandbox, o su un sistema che non e' Windows) non
+    esistono errori COM: la tupla resta vuota, e nessun retry scatta mai —
+    semplicemente perche' non c'e' nulla di quel genere da ritentare.
+    """
+    try:
+        import pywintypes
+
+        return (pywintypes.com_error,)
+    except ImportError:
+        return ()
+
+
+_MARCATORI_TRANSITORI = (
+    "rpc_e_call_rejected",
+    "call was rejected by callee",
+    "server execution failed",
+    "chiamata rifiutata dal chiamato",
+)
+
+
+def _e_transitorio(exc: BaseException) -> bool:
+    if isinstance(exc, _tipi_com_transitori()):
+        return True
+    testo = str(exc).lower()
+    return any(m in testo for m in _MARCATORI_TRANSITORI)
+
+
+def _scrivi_con_copia_atomica(sorgente: Path, out_path: Path, scrivi) -> None:
+    """Esegue `scrivi(percorso_temporaneo)` su una COPIA, e la promuove al nome
+    buono solo se `scrivi` non solleva.
+
+    `out_path` non viene mai toccato finche' il lavoro non e' riuscito per
+    intero: se si interrompe a meta' — un errore COM, la macro che fallisce —
+    resta quello di prima (intatto per un giro parziale, assente per un giro
+    completo), non un file a meta' scrittura che un collega potrebbe prendere
+    per completo perche' si chiama giusto.
+
+    Separata da `build()` apposta: qui non c'e' Excel, quindi tutto cio' che
+    serve xlwings non e' verificabile in questo ambiente — ma questa funzione
+    non ne ha bisogno, e puo' essere testata per davvero con un `scrivi`
+    finto.
+    """
+    temp_path = out_path.with_name(f"{out_path.stem}.building{out_path.suffix}")
+    try:
+        shutil.copy2(sorgente, temp_path)
+        scrivi(temp_path)
+        # Atomico sullo stesso filesystem, Windows compreso: non esiste un
+        # istante in cui out_path e' a meta' scritto.
+        os.replace(temp_path, out_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
+def _con_retry(fn, *, tentativi: int = 3, attesa_iniziale: float = 2.0):
+    """Ritenta una chiamata xlwings che ha fallito per un errore COM transitorio.
+
+    Excel a volte rifiuta una chiamata RPC per un istante — e' "occupato": un
+    ridisegno, un altro comando ancora in corso — e la stessa chiamata,
+    ripetuta poco dopo, funziona. Non e' un errore da mostrare all'utente: e'
+    rumore di fondo di COM. Qualunque altro errore (un file mancante, un
+    foglio che non c'e') non e' transitorio e deve fallire subito, non essere
+    ritentato — altrimenti si perde solo tempo prima di fallire comunque.
+    """
+    attesa = attesa_iniziale
+    for tentativo in range(1, tentativi + 1):
+        try:
+            return fn()
+        except Exception as exc:
+            if tentativo == tentativi or not _e_transitorio(exc):
+                raise
+            time.sleep(attesa)
+            attesa *= 2
+
+
 def build(
     contract: Contract,
     settings: Settings,
@@ -463,6 +598,14 @@ def build(
 
     out_path = settings.workbook_path(week)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if _bloccato_da_excel(out_path):
+        raise PipelineError(
+            f"{out_path.name} e' aperto in Excel (trovato il file di lock "
+            f"'~${out_path.name}').\n"
+            f"  Chiudilo e rilancia: scrivere sopra un file aperto produce un "
+            f"salvataggio a meta' o un errore poco chiaro, non un avviso."
+        )
 
     # `--only` ricarica un SOTTOINSIEME: deve scrivere nel workbook che c'e'
     # gia', non ripartire dal template. Ripartendo dal template i fogli non
@@ -490,7 +633,6 @@ def build(
                 f"  Istruzioni: docs/architettura.md §6."
             )
         _assert_vba_compilabile(settings.template)
-        shutil.copy2(settings.template, out_path)
 
     try:
         import xlwings as xw
@@ -504,41 +646,48 @@ def build(
 
     writes: list[WriteResult] = []
     macro_ran = False
-    app = None
-    book = None
-    try:
-        app = xw.App(visible=settings.excel.visible, add_book=False)
-        app.display_alerts = False
-        app.screen_updating = False
-        book = app.books.open(str(out_path))
 
-        offset = _read_offset(book, contract) if settings.derived_mode == "python" else None
+    def _scrivi_workbook(temp_path: Path) -> None:
+        nonlocal macro_ran
+        app = None
+        book = None
+        try:
+            app = _con_retry(lambda: xw.App(visible=settings.excel.visible, add_book=False))
+            app.display_alerts = False
+            app.screen_updating = False
+            book = _con_retry(lambda: app.books.open(str(temp_path)))
 
-        # Solo i dataset per cui c'e' un blocco: con `--only` gli altri non sono
-        # stati letti, e cercarli qui era un KeyError proprio nel caso in cui
-        # `--only` serve (i turni che cambiano a giro iniziato).
-        for name, dataset in contract.datasets.items():
-            block = blocks.get(name)
-            if block is None:
-                continue
-            if settings.derived_mode == "python" and dataset.derived_fields:
-                block = add_derived(dataset, block, offset or 0.0)
-            writes.append(write_block(book, contract, dataset, block))
+            offset = _read_offset(book, contract) if settings.derived_mode == "python" else None
 
-        if settings.excel.full_rebuild:
-            app.api.CalculateFullRebuild()
-        else:
-            app.calculate()
+            # Solo i dataset per cui c'e' un blocco: con `--only` gli altri non
+            # sono stati letti, e cercarli qui era un KeyError proprio nel caso
+            # in cui `--only` serve (i turni che cambiano a giro iniziato).
+            for name, dataset in contract.datasets.items():
+                block = blocks.get(name)
+                if block is None:
+                    continue
+                if settings.derived_mode == "python" and dataset.derived_fields:
+                    block = add_derived(dataset, block, offset or 0.0)
+                writes.append(write_block(book, contract, dataset, block))
 
-        _run_macro(book, settings)
-        macro_ran = True
+            if settings.excel.full_rebuild:
+                app.api.CalculateFullRebuild()
+            else:
+                app.calculate()
 
-        book.save()
-    finally:
-        if book is not None:
-            book.close()
-        if app is not None:
-            app.quit()
+            _run_macro(book, settings)
+            macro_ran = True
+
+            _con_retry(book.save)
+        finally:
+            if book is not None:
+                book.close()
+            if app is not None:
+                app.quit()
+
+    _scrivi_con_copia_atomica(
+        out_path if parziale else settings.template, out_path, _scrivi_workbook
+    )
 
     # Il workbook e' salvato: ora si guarda com'e' venuto. E' la controparte del
     # preflight — quello controlla cio' che entra, questo cio' che e' uscito, e

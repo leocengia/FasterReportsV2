@@ -40,7 +40,7 @@ Sei file in ingresso, un workbook in uscita.
 | `AT DATASET W<NN>.xlsx` | stati agente da Amazon Connect | foglio `AT_DATASET` |
 | `ATwi DATASET W<NN>.xlsx` | tempi di gestione contatti | foglio `ATwi_DATASET` |
 | `SF DATABASE W<NN>.csv` | casi Salesforce | foglio `SF_DATABASE` |
-| `PSAT DATASET W<NN>.csv` | sondaggi di soddisfazione | foglio `PSAT_DATASET` |
+| `PSAT DATASET W<NN>.csv` | sondaggi di soddisfazione | foglio `PSAT_DATASET` (**opzionale**: se manca, si procede lo stesso — vedi capitolo 4) |
 | `Turni ....xlsx` | roster WFM | foglio `Turni` |
 | `Back Office ....xlsx` | slot di back office | foglio `Slot Only Cases` |
 
@@ -70,13 +70,29 @@ Serve un PC **Windows con Excel desktop installato**. Non funziona su Excel
 online né su un Mac senza Excel: le formule ad array e il VBA li deve valutare
 Excel vero.
 
+### La via semplice: `installa.bat`
+
+Doppio clic su **`installa.bat`**, nella cartella del progetto. Controlla se
+Python c'è, se non c'è prova a installarlo da solo, e poi installa quello che
+serve al programma. Va fatto **una volta per PC**.
+
+Se durante l'installazione di Python compare la richiesta "chiudi e rilancia":
+chiudi davvero la finestra e fai di nuovo doppio clic su `installa.bat` — Windows
+deve aggiornare le sue impostazioni prima che il resto funzioni.
+
+Se qualcosa va storto, la finestra lo dice in chiaro e non si chiude da sola:
+leggi il messaggio, e se resti bloccato manda uno screenshot di quella finestra
+a chi ti ha dato il programma.
+
+### La via manuale, se preferisci la riga di comando
+
 ```bash
 git clone <indirizzo del repository>
 cd "Faster Reports v2"
 pip install -e ".[excel]"
 ```
 
-Poi verifica:
+### In entrambi i casi, verifica
 
 ```bash
 omni-report check
@@ -151,6 +167,30 @@ sempre su una copia.
 
 Vedi capitolo 7. Sono tre controlli, due minuti.
 
+### (Opzionale) Farlo girare da solo, senza doppio clic
+
+`--week auto` (e `run_report.bat auto`) calcolano da soli il numero della
+settimana: **l'ultima settimana lunedì-domenica già conclusa**, contata dalla
+data di oggi. Non serve digitare niente, e non compare nessun prompt — utile
+per un'attività pianificata di Windows che lanci il report da sola, per
+esempio ogni lunedì mattina.
+
+Per registrarla:
+
+1. Apri **Utilità di pianificazione** (Task Scheduler) di Windows.
+2. **Crea attività di base** → un nome a piacere → **Settimanalmente**, il
+   giorno che preferisci (tipicamente lunedì, per il report della settimana
+   appena chiusa).
+3. Azione: **Avvia un programma**. Programma: il percorso completo di
+   `run_report.bat` in questa cartella. Argomenti: `auto`.
+4. Salva.
+
+**Attenzione**: l'attività genera il report solo se i sei file sono già in
+`input\` per quella settimana — non li scarica lei. Se mancano, il preflight
+blocca come sempre e non produce niente: non è un problema, ma nemmeno un
+sostituto dello scaricare i file. Controlla comunque `output\preflight_W<NN>.txt`
+la mattina dopo, per essere certo che sia andata bene.
+
 ---
 
 ## 4. Leggere il preflight
@@ -181,7 +221,12 @@ tutto. Se non sono quelli che ti aspetti, hai scaricato l'export sbagliato.
 
 Cosa guardare:
 
-- **`STATO`**: `OK` o `BLOCCATO`. Se è bloccato, il perché è sotto.
+- **`STATO`**: `OK`, `BLOCCATO`, oppure `SALTATO (fonte opzionale, assente
+  questa settimana)`. Oggi solo `PSAT_DATASET` può dare questo terzo stato:
+  se l'export dei sondaggi non c'è, il foglio viene scritto **vuoto** (non
+  lasciato con i dati della settimana prima) e il resto del report procede
+  normalmente — nessuna regola di malpractice legge quella fonte. Le altre
+  cinque fonti non hanno questa possibilità: se mancano, bloccano sempre.
 - **`via`**: come è stata trovata la colonna. `esatto` è il caso normale.
   `alias` o `normalizzato` significa che l'export ha cambiato il nome della
   colonna e il programma l'ha ritrovata comunque: funziona, ma **è un
@@ -448,13 +493,24 @@ funziona e non si capisce perché.
 ### `omni-report preflight --week NN`
 Valida le sei fonti senza aprire Excel. Salva `output\preflight_W<NN>.txt`.
 
+`--week` accetta anche `auto`: l'ultima settimana lunedì-domenica già conclusa,
+calcolata dalla data di oggi. Serve a non dover digitare il numero — utile da
+un'attività pianificata (capitolo 3).
+
 ```
 --only DATASET [DATASET ...]   controlla solo alcune fonti
 --input DIR / --output DIR     altre cartelle
 ```
 
 ### `omni-report build --week NN`
-Il "pulsante". Richiede Excel.
+Il "pulsante". Richiede Excel. Accetta `--week auto` come sopra.
+
+Prima di scrivere, controlla che il file di output non sia già aperto in
+Excel (il lock `~$Omni_Report_W<NN>.xlsm`): se lo è, si ferma e lo dice, invece
+di rischiare un salvataggio a metà. E non tocca mai il file buono finché il
+lavoro non è finito con successo: scrive su una copia temporanea e la
+rinomina solo alla fine — un build interrotto a metà non lascia un file con il
+nome giusto e i dati sbagliati.
 
 ```
 --visible                      mostra Excel mentre lavora
@@ -544,6 +600,23 @@ cambia i nomi delle colonne o quando serve una colonna nuova — vedi
 
 ## 10. Quando qualcosa va storto
 
+### «Python non è stato trovato; eseguire senza argomenti da installare dal Microsoft Store...»
+Non è un errore del programma: significa che su questo PC **non c'è un Python
+vero**. Fai doppio clic su `installa.bat` — prova a installarlo da solo. Se non
+l'hai ancora fatto su questo PC, è sempre il primo passo (capitolo 2).
+
+### Manca il file dei PSAT (sondaggi)
+Non è un problema: `PSAT_DATASET` è l'unica fonte **opzionale**. Se l'export non
+c'è (nessuna risposta ai sondaggi quella settimana, o il file non è ancora
+arrivato), il preflight mostra `STATO: SALTATO` invece di `BLOCCATO` e il resto
+del report — inclusa `Dettaglio Malpractice` — si genera normalmente. Il foglio
+`PSAT_DATASET` nel workbook prodotto sarà vuoto, e con lui `Recap PSAT Positive`
+e `PSAT Positive Export`: non è un errore, è la settimana senza dati.
+
+Se invece il file **c'è** ma con le colonne sbagliate, quello blocca comunque
+come tutte le altre fonti — "opzionale" vale solo per "il file non c'è", non per
+"il file è messo male".
+
 ### «nessun file corrisponde a `Turni*`»
 Il file non è in `input\`, o si chiama diversamente da come lo aspetta
 `settings.yml`. Il messaggio elenca i file che ha trovato.
@@ -558,6 +631,12 @@ Due settimane nella stessa cartella. Togli quella vecchia.
 Chiudi il processo Excel dal Task Manager e rilancia. Se succede sempre, lancia
 `omni-report check`: la voce `VBA compilabile` o `MsgBox silenziati` ti dirà se il
 template ha un problema che ferma la macro con una finestra invisibile.
+
+### «...è aperto in Excel (trovato il file di lock)»
+Qualcuno (forse tu, in un'altra finestra) ha il file di output di quella
+settimana ancora aperto in Excel. Chiudilo e rilancia. Il programma si ferma
+apposta prima di scrivere: sovrascrivere un file aperto darebbe un salvataggio
+a metà o un errore poco chiaro, non un avviso leggibile.
 
 ### Il preflight dice OK ma i numeri sembrano strani
 Fai i tre controlli del capitolo 7. Se `Helper Turni!N` è a zero il problema è il

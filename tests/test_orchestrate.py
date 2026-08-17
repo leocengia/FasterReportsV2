@@ -82,13 +82,20 @@ def test_fonti_assenti_elencate_tutte(contratto, cfg):
     solleva proprio perche' il file non c'e': il preflight moriva mentre
     descriveva il guasto, e chi lanciava vedeva una fonte sola invece di sapere
     quali delle sei mancavano.
+
+    `PSAT_DATASET` e' l'eccezione dichiarata: e' `optional`, quindi la sua riga
+    e' SALTATA (non BLOCCATA) e il resto del report procede lo stesso attorno
+    a lei — vedi i test dedicati piu' sotto per il perche'.
     """
     report, blocks = run_preflight(contratto, cfg, week_number=31)
     assert len(report.datasets) == len(contratto.datasets)
-    assert not report.ok
-    assert blocks == {}
+    assert not report.ok  # le CINQUE fonti obbligatorie mancano comunque
+    assert list(blocks) == ["PSAT_DATASET"]  # solo il blocco vuoto dell'opzionale
     for d in report.datasets:
-        assert d.error, d.name
+        if d.name == "PSAT_DATASET":
+            assert not d.error and d.skipped_reason
+        else:
+            assert d.error, d.name
         assert "nessun file corrispondente" in d.source
 
 
@@ -97,8 +104,106 @@ def test_una_fonte_su_sei_non_impedisce_di_leggerla(contratto, cfg):
     report, blocks = run_preflight(contratto, cfg, week_number=31)
     assert _ds(report, "AT_DATASET").ok
     assert "AT_DATASET" in blocks
-    # le altre cinque restano bloccate, ognuna col suo perche'
-    assert sum(1 for d in report.datasets if d.error) == len(contratto.datasets) - 1
+    # PSAT (opzionale) e' saltata, non bloccata: restano bloccate le altre
+    # quattro fonti obbligatorie (ATwi, SF, Turni, Slot Only Cases).
+    assert sum(1 for d in report.datasets if d.error) == len(contratto.datasets) - 2
+    assert _ds(report, "PSAT_DATASET").skipped_reason
+    assert not _ds(report, "PSAT_DATASET").error
+
+
+# ---------------------------------------------------------------------------
+# La fonte opzionale: assente si segnala, sbagliata blocca comunque
+# ---------------------------------------------------------------------------
+
+
+def test_fonte_opzionale_assente_segnala_e_non_blocca_il_resto(contratto, cfg):
+    """Il caso vero della W32: l'export dei sondaggi non esisteva affatto.
+
+    Nessuna regola di malpractice legge PSAT_DATASET (nessun `consumers` inizia
+    per `VBA:`): bloccare l'intero report per una fonte che il motore non usa
+    sarebbe fermare le regole su AT/SF/Turni per un problema che non le
+    riguarda.
+    """
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    report, blocks = run_preflight(contratto, cfg, week_number=31, only={"AT_DATASET", "PSAT_DATASET"})
+    psat = _ds(report, "PSAT_DATASET")
+    assert psat.ok  # skipped_reason non e' un errore
+    assert psat.skipped_reason
+    assert "SALTATO" in report.render()
+    assert "BLOCCATO" not in report.render().split("PSAT_DATASET")[1].split("###")[0]
+
+
+def test_fonte_opzionale_assente_produce_un_blocco_vuoto_non_lassenza(contratto, cfg):
+    """Il blocco vuoto e' cio' che fa PULIRE il foglio invece di lasciarlo con
+    l'ultima settimana scritta: misurato, il template porta residui (130 righe
+    in PSAT_DATASET) proprio perche' non e' mai stato svuotato apposta."""
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    _, blocks = run_preflight(contratto, cfg, week_number=31, only={"AT_DATASET", "PSAT_DATASET"})
+    assert "PSAT_DATASET" in blocks
+    vuoto = blocks["PSAT_DATASET"]
+    assert vuoto.n_rows == 0
+    assert vuoto.dataset == "PSAT_DATASET"
+
+
+def test_fonte_opzionale_presente_funziona_come_sempre(contratto, cfg):
+    """optional=true non deve cambiare nulla quando il file C'E': deve solo
+    smettere di bloccare quando non c'e'."""
+    import csv
+
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    ds = contratto.dataset("PSAT_DATASET")
+    headers = [f.canonical for f in ds.input_fields]
+    p = cfg.input_dir / "PSAT DATASET W31.csv"
+    with p.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(headers)
+        w.writerow(["Mario Rossi", "2026-07-28", "12345", "9", "ottimo"])
+
+    report, blocks = run_preflight(contratto, cfg, week_number=31, only={"AT_DATASET", "PSAT_DATASET"})
+    psat = _ds(report, "PSAT_DATASET")
+    assert psat.ok and not psat.skipped_reason
+    assert blocks["PSAT_DATASET"].n_rows == 1
+
+
+def test_fonte_opzionale_con_colonne_sbagliate_blocca_comunque(contratto, cfg):
+    """Un file che C'E' ma ha le colonne sbagliate non e' "assente questa
+    settimana": e' un problema nei dati, e deve bloccare come per qualunque
+    altra fonte — optional copre solo il caso "il file non c'e'"."""
+    scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
+    p = cfg.input_dir / "PSAT DATASET W31.csv"
+    p.write_text("colonna_a_caso,altra\nx,y\n", encoding="utf-8")
+
+    report, blocks = run_preflight(contratto, cfg, week_number=31, only={"AT_DATASET", "PSAT_DATASET"})
+    psat = _ds(report, "PSAT_DATASET")
+    assert psat.error and not psat.skipped_reason
+    assert "PSAT_DATASET" not in blocks
+
+
+def test_optional_su_dataset_letto_dal_vba_non_si_carica():
+    """Difesa nel caricamento del contratto: un dataset che il VBA consuma non
+    puo' essere dichiarato opzionale, altrimenti la sua assenza produrrebbe
+    numeri sbagliati in silenzio invece che assenti."""
+    from fasterreports.core.errors import ContractError
+    from fasterreports.core.contract import parse_contract
+
+    raw = {
+        "datasets": {
+            "X": {
+                "sheet": "X",
+                "header_row": 1,
+                "data_start_col": "A",
+                "optional": True,
+                "fields": [{
+                    "canonical": "Nome",
+                    "target_col": "A",
+                    "role": "input",
+                    "consumers": ["VBA:AddXRules"],
+                }],
+            }
+        }
+    }
+    with pytest.raises(ContractError, match="VBA:AddXRules"):
+        parse_contract(raw)
 
 
 # ---------------------------------------------------------------------------

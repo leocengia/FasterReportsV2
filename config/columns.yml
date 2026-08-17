@@ -236,12 +236,23 @@ datasets:
   # --------------------------------------------------------------------------
   # PSAT_DATASET — export survey, 134 colonne (il piano diceva 121: l'export
   # e' cresciuto). Dati da A.
+  #
+  # optional: true — deciso il 2026-08-10, dopo che per la W32 l'export dei
+  # sondaggi non esisteva affatto (nessuna risposta quella settimana, non un
+  # errore di chi scarica). Nessun campo qui sotto ha un consumatore `VBA:...`:
+  # i suoi soli lettori sono 'Report Agenti' (una colonna), 'Recap PSAT
+  # Positive' e 'PSAT Positive Export' — nessuno di questi e' il motore di
+  # malpractice. Se il file manca, il preflight SEGNALA (non BLOCCA) e il
+  # foglio viene scritto vuoto, cosi' quei tre punti restano vuoti per la
+  # settimana invece di mostrare dati di una settimana precedente: il template
+  # portava ancora 130 righe residue quando questo e' stato misurato.
   # --------------------------------------------------------------------------
   PSAT_DATASET:
     sheet: PSAT_DATASET
     header_row: 1
     data_start_col: A
     data_end_col: ED
+    optional: true
     fields:
       - canonical: "Agent Name"
         target_col: I

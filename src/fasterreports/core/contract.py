@@ -77,6 +77,13 @@ class Dataset:
     # `wfm_roster` e `wfm_backoffice` da matrici larghe .xlsx che vanno prima
     # portate in forma lunga (core/wfmsource.py).
     reader: str = "csv"
+    # Se la fonte manca, il preflight SEGNALA invece di BLOCCARE, e il build
+    # scrive il foglio VUOTO (non lo lascia stare: un residuo della settimana
+    # prima nel template sarebbe un report sbagliato, non uno che manca).
+    # Va messo a True solo se nessuna regola di malpractice dipende dal
+    # dataset — verificalo in `consumers` prima di cambiarlo: se anche un solo
+    # campo e' letto da 'VBA:...', la fonte non e' opzionale.
+    optional: bool = False
 
     @property
     def input_fields(self) -> tuple[Field, ...]:
@@ -189,9 +196,27 @@ def parse_contract(raw: dict) -> Contract:
                 f"(ammessi: {', '.join(sorted(_VALID_READERS))})."
             )
 
+        optional = bool(body.get("optional", False))
+        if optional:
+            # Difesa contro l'errore piu' costoso possibile qui: marcare come
+            # opzionale una fonte che il motore usa davvero. Se manca, il VBA
+            # non se ne accorgerebbe: i numeri sarebbero sbagliati, non assenti.
+            consumatori_vba = sorted({
+                c for f in fields for c in f.consumers if c.startswith("VBA:")
+            })
+            if consumatori_vba:
+                raise ContractError(
+                    f"Dataset {name}: optional=true ma e' consumato dal VBA "
+                    f"({', '.join(consumatori_vba)}). Una fonte che alimenta il "
+                    f"motore di malpractice non puo' essere opzionale: se "
+                    f"manca, quei calcoli sarebbero sbagliati in silenzio, non "
+                    f"solo assenti."
+                )
+
         datasets[name] = Dataset(
             name=name,
             reader=reader,
+            optional=optional,
             sheet=str(body["sheet"]),
             header_row=int(body["header_row"]),
             data_start_col=str(body["data_start_col"]).upper(),

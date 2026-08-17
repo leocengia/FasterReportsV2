@@ -201,6 +201,38 @@ def test_settimana_obbligatoria_non_ritaglia_se_assente(tmp_path):
     assert len(read_roster(p).data) == 2
 
 
+def test_roster_sheet_sbagliato_dice_dove_si_corregge(tmp_path):
+    """Un nome scelto a mano (non indovinato da `_pick_sheet`) che non esiste
+    deve dire non solo quale nome cercava, ma anche dove e' stato scritto:
+    altrimenti chi legge l'errore non sa se il problema e' nel file o nella
+    configurazione."""
+    p = make_xlsx(tmp_path / "r.xlsx", "publish", roster_grid())
+    with pytest.raises(SourceError) as e:
+        read_roster(p, week=week_bounds(46223), sheet_name="foglio_sbagliato")
+    msg = str(e.value)
+    assert "'foglio_sbagliato'" in msg           # cosa cercava
+    assert "'publish'" in msg                    # cosa c'era davvero
+    assert "sources.roster_sheet" in msg          # dove si corregge
+
+
+def test_sheet_error_con_hint_solo_se_scelto_a_mano():
+    """`_pick_sheet` restituisce sempre un nome che esiste nel file (o il primo
+    foglio, se il preferito manca): il ramo 'foglio assente' scatta solo
+    quando il nome viene da una scelta esplicita. La funzione va quindi
+    verificata direttamente, perche' il percorso 'auto-indovinato + assente'
+    non si presenta mai a runtime."""
+    from fasterreports.core.wfmsource import _sheet_error_con_hint
+
+    originale = SourceError("x.xlsx: foglio 'Y' assente.\n  Fogli presenti: 'publish'")
+
+    con_hint = _sheet_error_con_hint(originale, "Y", "sources.roster_sheet")
+    assert "sources.roster_sheet" in str(con_hint)
+
+    senza_scelta = _sheet_error_con_hint(originale, None, "sources.roster_sheet")
+    assert senza_scelta is originale
+    assert "sources.roster_sheet" not in str(senza_scelta)
+
+
 # --- back office -----------------------------------------------------------
 
 def backoffice_grid(rows, dates=(46223, 46224)):
@@ -282,6 +314,17 @@ def test_backoffice_senza_date_blocca(tmp_path):
     with pytest.raises(SourceError) as e:
         read_backoffice(p, week=week_bounds(46223))
     assert "intestazione" in str(e.value).lower()
+
+
+def test_backoffice_sheet_sbagliato_dice_dove_si_corregge(tmp_path):
+    grid = backoffice_grid([("HPO", "Mario", "Rossi", ["1000_1030", "NO BOT"])])
+    p = make_xlsx(tmp_path / "b.xlsx", "Only Cases Shifts", grid)
+    with pytest.raises(SourceError) as e:
+        read_backoffice(p, week=week_bounds(46223), sheet_name="foglio_sbagliato")
+    msg = str(e.value)
+    assert "'foglio_sbagliato'" in msg
+    assert "'Only Cases Shifts'" in msg
+    assert "sources.backoffice_sheet" in msg
 
 
 # --- lettore xlsx ----------------------------------------------------------

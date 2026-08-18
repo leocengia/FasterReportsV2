@@ -1,0 +1,54 @@
+week,channel,case_type,volume,aht,iso_year,week_key
+33,Non-live,Account Takeover,4,19.2,2026,202633
+33,Non-live,Booking Information,29,28.85454545454545,2026,202633
+33,Non-live,Connectivity Questions,2,25.5,2026,202633
+33,Non-live,Contact Update,2,20.4,2026,202633
+33,Non-live,Content Update,6,10.680000000000001,2026,202633
+33,Non-live,Customer Review Removal,4,5.6000000000000005,2026,202633
+33,Non-live,EVC,15,6.933333333333334,2026,202633
+33,Non-live,Expedia Collect Invoice,10,23.1,2026,202633
+33,Non-live,Hotel Closure Outreach,14,11.142857142857142,2026,202633
+33,Non-live,Hotel Collect Issue,15,17.76923076923077,2026,202633
+33,Non-live,Inventory Closeout,1,12.0,2026,202633
+33,Non-live,Live Site Investigation,2,28.8,2026,202633
+33,Non-live,Live Site Property Settings Issue,1,19.8,2026,202633
+33,Non-live,Partner Central Access,26,19.224,2026,202633
+33,Non-live,Pre-Onboarding,1,0.0,2026,202633
+33,Non-live,Promotion,19,13.200000000000001,2026,202633
+33,Non-live,Property Details,4,1.2,2026,202633
+33,Non-live,Property Settings,18,17.261538461538468,2026,202633
+33,Non-live,Rates & Inventory Changes,19,3.6000000000000005,2026,202633
+33,Non-live,Refund Request,4,17.400000000000002,2026,202633
+33,Non-live,Room Type/Rate Plan,14,22.53333333333333,2026,202633
+33,Non-live,Special Check-In Instructions,1,34.2,2026,202633
+33,Non-live,Specialty Functions,3,0.6,2026,202633
+33,Non-live,Supplier Initiated Relocation,23,9.876923076923076,2026,202633
+33,Non-live,Supplier Initiated Traveler Contact,620,8.667235494880543,2026,202633
+33,Phone,Booking Information,290,17.209756097560984,2026,202633
+33,Phone,Bulk Update Request,1,15.0,2026,202633
+33,Phone,Call Assignment,30,3.827586206896551,2026,202633
+33,Phone,Collections,1,24.6,2026,202633
+33,Phone,Connectivity Questions,4,23.549999999999997,2026,202633
+33,Phone,Contact Update,3,25.400000000000002,2026,202633
+33,Phone,Content Update,12,21.150000000000002,2026,202633
+33,Phone,Customer Review Removal,8,12.374999999999998,2026,202633
+33,Phone,EVC,155,15.76258064516129,2026,202633
+33,Phone,Expedia Collect Invoice,107,16.659813084112148,2026,202633
+33,Phone,Hotel Collect Issue,167,13.55928143712575,2026,202633
+33,Phone,Inventory Closeout,3,31.200000000000003,2026,202633
+33,Phone,Known Tool Outage Issue,1,25.2,2026,202633
+33,Phone,Live Site Investigation,7,24.171428571428574,2026,202633
+33,Phone,New Contract,7,24.514285714285712,2026,202633
+33,Phone,Partner Central Access,27,32.06666666666667,2026,202633
+33,Phone,Pre-Onboarding,2,23.1,2026,202633
+33,Phone,Promotion,20,11.790000000000003,2026,202633
+33,Phone,Property Classification,1,8.4,2026,202633
+33,Phone,Property Details,7,9.0,2026,202633
+33,Phone,Property Photos,1,47.4,2026,202633
+33,Phone,Property Settings,63,21.53333333333334,2026,202633
+33,Phone,Rates & Inventory Changes,49,26.497959183673473,2026,202633
+33,Phone,Refund Request,44,19.437209302325574,2026,202633
+33,Phone,Room Type/Rate Plan,31,19.606451612903225,2026,202633
+33,Phone,Specialty Functions,5,9.84,2026,202633
+33,Phone,Supplier Initiated Relocation,102,15.01176470588235,2026,202633
+33,Phone,Supplier Initiated Traveler Contact,828,10.442475728155335,2026,202633

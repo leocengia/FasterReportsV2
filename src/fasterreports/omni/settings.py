@@ -43,6 +43,12 @@ class Settings:
     input_dir: Path = Path("input")
     output_dir: Path = Path("output")
     template: Path = Path("template/Omni_Report_TEMPLATE.xlsm")
+    # Lo storico settimanale di volume/AHT per case type. NON sta in output/:
+    # quella cartella e' usa-e-getta (ed e' fuori da git), mentre questo file e'
+    # la memoria del trend — l'unica cosa del progetto che non si puo'
+    # ricostruire rilanciando il programma, perche' gli export delle settimane
+    # passate non li abbiamo piu'. Va versionato.
+    aht_history: Path = Path("data/aht_history.csv")
     input_files: dict[str, str] = field(default_factory=dict)
     workbook_name: str = "Omni_Report_W{week}.xlsm"
     preflight_name: str = "preflight_W{week}.txt"
@@ -219,6 +225,7 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
         input_dir=resolve(paths.get("input", "input")),
         output_dir=resolve(paths.get("output", "output")),
         template=resolve(paths.get("template", "template/Omni_Report_TEMPLATE.xlsm")),
+        aht_history=resolve(paths.get("aht_history", "data/aht_history.csv")),
         input_files=dict(raw.get("input_files") or {}),
         workbook_name=str(out.get("workbook_name", "Omni_Report_W{week}.xlsm")),
         preflight_name=str(out.get("preflight_name", "preflight_W{week}.txt")),

@@ -157,6 +157,25 @@ datasets:
     data_end_col: EM
     list_object: AHT_Data
     fields:
+      - canonical: "Date Viewpoint"
+        target_col: A
+        role: input
+        dtype: datetime
+        date_format: "%m/%d/%Y %I:%M:%S %p"
+        aliases: ["date_viewpoint"]
+        consumers: ["Python:aht_history"]
+        notes: >
+          Il lunedi' della settimana coperta dall'export: Tableau scarica a
+          granularita' settimanale, quindi tutte le righe hanno lo stesso
+          valore (nel W33: 8/10/2026 su 2833 righe su 2833).
+          Nessuna formula del workbook la legge — la usa Python, per due
+          controlli di coerenza: che cada di lunedi' e che sia la stessa
+          settimana del resto del report.
+          date_format e' OBBLIGATORIO qui e non e' una precauzione teorica:
+          `8/10/2026` si legge sia come 10 agosto (export americano, questo)
+          sia come 8 ottobre, e la lista di formati provava prima quello
+          europeo. Senza questa riga la settimana risultava la 41 invece
+          della 33, in silenzio.
       - canonical: "Case Origin (group)"
         target_col: U
         role: input
@@ -232,6 +251,23 @@ datasets:
         dtype: float
         aliases: ["misrouted_cases"]
         consumers: ["Report Agenti"]
+      - canonical: "Overall Performance to AHT Target"
+        target_col: EJ
+        role: input
+        dtype: float
+        aliases: ["overall_performance_to_aht_target"]
+        consumers: ["Helper CaseType"]
+        notes: >
+          Aggiunta il 2026-08-18 con i fogli 'CaseType Deepdive' /
+          'Helper CaseType'. Quest'ultimo la legge come riferimento
+          strutturato — AHT_Data[Overall Performance to AHT Target] — per la
+          colonna Out_of_Target: COUNTIFS(..., ">=1") / volume, cioe' la quota
+          di casi che hanno sforato il target di AHT.
+          Senza questa colonna Out_of_Target resta 0 per ogni case type e la
+          classificazione (Highly Actionable / Actionable / Process Driven)
+          perde uno dei suoi cinque ingredienti, sempre a favore di
+          'Process Driven'. Nessun errore visibile: solo un deepdive che dice
+          che va tutto bene.
 
   # --------------------------------------------------------------------------
   # PSAT_DATASET — export survey, 134 colonne (il piano diceva 121: l'export

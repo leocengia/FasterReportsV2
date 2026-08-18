@@ -1,0 +1,547 @@
+week,channel,case_type,volume,aht,iso_year,week_key
+22,Non-live,Account Takeover,1,34.2,2026,202622
+22,Non-live,Booking Information,112,22.1340659340659,2026,202622
+22,Non-live,Connectivity Questions,9,29.6571428571429,2026,202622
+22,Non-live,Contact Update,4,12.3,2026,202622
+22,Non-live,Content Update,41,15.3090909090909,2026,202622
+22,Non-live,Customer Review Removal,22,21.6272727272727,2026,202622
+22,Non-live,EVC,47,18.195,2026,202622
+22,Non-live,Expedia Collect Invoice,103,14.3927710843373,2026,202622
+22,Non-live,Hotel Closure Outreach,10,21.12,2026,202622
+22,Non-live,Hotel Collect Issue,35,11.9117647058823,2026,202622
+22,Non-live,Inventory Closeout,5,15.0,2026,202622
+22,Non-live,Known Tool Outage Issue,5,12.84,2026,202622
+22,Non-live,Live Site Investigation,4,19.95,2026,202622
+22,Non-live,New Contract,5,26.64,2026,202622
+22,Non-live,Partner Central Access,43,22.71,2026,202622
+22,Non-live,Pre-Onboarding,1,13.2,2026,202622
+22,Non-live,Promotion,41,18.7826086956522,2026,202622
+22,Non-live,Property Classification,6,31.7,2026,202622
+22,Non-live,Property Details,34,9.96428571428571,2026,202622
+22,Non-live,Property Photos,5,18.6,2026,202622
+22,Non-live,Property Settings,111,18.4022727272727,2026,202622
+22,Non-live,Rates & Inventory Changes,98,20.9826086956522,2026,202622
+22,Non-live,Refund Request,94,13.6333333333333,2026,202622
+22,Non-live,Room Type/Rate Plan,99,21.6130434782609,2026,202622
+22,Non-live,Special Check-In Instructions,8,11.76,2026,202622
+22,Non-live,Supplier Initiated Relocation,11,10.4666666666667,2026,202622
+22,Non-live,Supplier Initiated Traveler Contact,936,9.35769230769231,2026,202622
+22,Phone,Booking Information,188,25.8893617021277,2026,202622
+22,Phone,Connectivity Questions,2,36.3,2026,202622
+22,Phone,Content Update,49,19.725,2026,202622
+22,Phone,Customer Review Removal,3,16.2,2026,202622
+22,Phone,EVC,205,19.0676470588235,2026,202622
+22,Phone,Expedia Collect Invoice,380,17.19,2026,202622
+22,Phone,Hotel Collect Issue,177,20.335593220339,2026,202622
+22,Phone,Inventory Closeout,3,24.8,2026,202622
+22,Phone,Known Tool Outage Issue,1,13.8,2026,202622
+22,Phone,Live Site Investigation,11,26.1818181818182,2026,202622
+22,Phone,New Contract,18,20.1666666666667,2026,202622
+22,Phone,Partner Central Access,56,41.2285714285714,2026,202622
+22,Phone,Pre-Onboarding,15,21.32,2026,202622
+22,Phone,Promotion,24,21.525,2026,202622
+22,Phone,Property Classification,2,16.5,2026,202622
+22,Phone,Property Details,6,15.5,2026,202622
+22,Phone,Property Photos,1,22.2,2026,202622
+22,Phone,Property Settings,114,20.5894736842105,2026,202622
+22,Phone,Rates & Inventory Changes,46,32.5043478260869,2026,202622
+22,Phone,Refund Request,31,19.8193548387097,2026,202622
+22,Phone,Room Type/Rate Plan,29,34.1172413793103,2026,202622
+22,Phone,Special Check-In Instructions,2,54.6,2026,202622
+22,Phone,Supplier Initiated Relocation,109,18.0495412844037,2026,202622
+22,Phone,Supplier Initiated Traveler Contact,1022,15.1908023483366,2026,202622
+23,Non-live,Account Takeover,1,15.6,2026,202623
+23,Non-live,Booking Information,77,15.8788732394366,2026,202623
+23,Non-live,Connectivity Questions,11,14.4857142857143,2026,202623
+23,Non-live,Contact Update,2,9.3,2026,202623
+23,Non-live,Content Update,33,17.0142857142857,2026,202623
+23,Non-live,Customer Review Removal,17,21.4941176470588,2026,202623
+23,Non-live,EVC,64,16.7222222222222,2026,202623
+23,Non-live,Expedia Collect Invoice,53,17.2166666666667,2026,202623
+23,Non-live,Hotel Closure Outreach,7,19.6285714285714,2026,202623
+23,Non-live,Hotel Collect Issue,41,15.5470588235294,2026,202623
+23,Non-live,Inventory Closeout,3,14.1,2026,202623
+23,Non-live,Known Tool Outage Issue,4,25.2,2026,202623
+23,Non-live,Live Site Investigation,6,44.76,2026,202623
+23,Non-live,New Contract,2,18.9,2026,202623
+23,Non-live,Partner Central Access,20,28.8,2026,202623
+23,Non-live,Pre-Onboarding,3,6.0,2026,202623
+23,Non-live,Promotion,15,19.14,2026,202623
+23,Non-live,Property Classification,3,22.4,2026,202623
+23,Non-live,Property Details,38,9.54193548387097,2026,202623
+23,Non-live,Property Photos,1,187.2,2026,202623
+23,Non-live,Property Settings,60,19.0625,2026,202623
+23,Non-live,Rates & Inventory Changes,63,18.96,2026,202623
+23,Non-live,Refund Request,81,13.3703703703704,2026,202623
+23,Non-live,Room Type/Rate Plan,75,18.2949152542373,2026,202623
+23,Non-live,Special Check-In Instructions,4,19.8,2026,202623
+23,Non-live,Supplier Initiated Relocation,7,26.6,2026,202623
+23,Non-live,Supplier Initiated Traveler Contact,744,8.88033946251768,2026,202623
+23,Phone,Booking Information,156,23.4846153846154,2026,202623
+23,Phone,Connectivity Questions,12,25.7,2026,202623
+23,Phone,Contact Update,3,15.6,2026,202623
+23,Phone,Content Update,45,27.8533333333333,2026,202623
+23,Phone,Customer Review Removal,6,23.0,2026,202623
+23,Phone,EVC,180,18.9833333333333,2026,202623
+23,Phone,Expedia Collect Invoice,120,18.06,2026,202623
+23,Phone,Hotel Collect Issue,151,18.8980132450331,2026,202623
+23,Phone,Inventory Closeout,1,24.6,2026,202623
+23,Phone,Known Tool Outage Issue,4,31.35,2026,202623
+23,Phone,Live Site Investigation,8,26.475,2026,202623
+23,Phone,New Contract,18,24.2,2026,202623
+23,Phone,Partner Central Access,33,34.4727272727273,2026,202623
+23,Phone,Pre-Onboarding,9,60.2666666666667,2026,202623
+23,Phone,Promotion,20,21.3,2026,202623
+23,Phone,Property Details,2,53.7,2026,202623
+23,Phone,Property Photos,3,10.0,2026,202623
+23,Phone,Property Settings,103,22.1184466019418,2026,202623
+23,Phone,Rates & Inventory Changes,26,30.3923076923077,2026,202623
+23,Phone,Refund Request,32,17.7,2026,202623
+23,Phone,Room Type/Rate Plan,21,28.3428571428571,2026,202623
+23,Phone,Supplier Initiated Relocation,78,16.9846153846154,2026,202623
+23,Phone,Supplier Initiated Traveler Contact,884,14.3694570135747,2026,202623
+24,Non-live,Account Takeover,4,20.85,2026,202624
+24,Non-live,Booking Information,79,18.3,2026,202624
+24,Non-live,Connectivity Questions,8,20.8285714285714,2026,202624
+24,Non-live,Contact Update,2,23.7,2026,202624
+24,Non-live,Content Update,80,15.34,2026,202624
+24,Non-live,Customer Review Removal,22,18.1636363636364,2026,202624
+24,Non-live,EVC,83,13.0936708860759,2026,202624
+24,Non-live,Expedia Collect Invoice,59,16.1086956521739,2026,202624
+24,Non-live,Hotel Closure Outreach,6,40.9,2026,202624
+24,Non-live,Hotel Collect Issue,65,19.5310344827586,2026,202624
+24,Non-live,Inventory Closeout,5,7.6,2026,202624
+24,Non-live,Known Tool Outage Issue,3,6.0,2026,202624
+24,Non-live,Live Site Investigation,8,16.6285714285714,2026,202624
+24,Non-live,New Contract,2,9.0,2026,202624
+24,Non-live,Partner Central Access,28,17.9555555555556,2026,202624
+24,Non-live,Pre-Onboarding,5,25.05,2026,202624
+24,Non-live,Promotion,18,26.4428571428571,2026,202624
+24,Non-live,Property Classification,11,15.8181818181818,2026,202624
+24,Non-live,Property Details,49,7.17073170731707,2026,202624
+24,Non-live,Property Photos,7,17.6571428571429,2026,202624
+24,Non-live,Property Settings,124,13.8074074074074,2026,202624
+24,Non-live,Rates & Inventory Changes,50,24.735,2026,202624
+24,Non-live,Refund Request,67,16.7727272727273,2026,202624
+24,Non-live,Room Type/Rate Plan,104,16.4426966292135,2026,202624
+24,Non-live,Special Check-In Instructions,3,14.4,2026,202624
+24,Non-live,Supplier Initiated Relocation,7,16.8,2026,202624
+24,Non-live,Supplier Initiated Traveler Contact,812,9.36394736842106,2026,202624
+24,Phone,Booking Information,192,21.8875,2026,202624
+24,Phone,Connectivity Questions,10,15.96,2026,202624
+24,Phone,Contact Update,2,9.6,2026,202624
+24,Phone,Content Update,55,27.0545454545455,2026,202624
+24,Phone,Customer Review Removal,8,26.25,2026,202624
+24,Phone,EVC,227,19.4801762114537,2026,202624
+24,Phone,Expedia Collect Invoice,136,19.1382352941177,2026,202624
+24,Phone,Hotel Collect Issue,162,16.0925925925926,2026,202624
+24,Phone,Inventory Closeout,4,21.6,2026,202624
+24,Phone,Known Tool Outage Issue,1,11.4,2026,202624
+24,Phone,Live Site Investigation,4,66.9,2026,202624
+24,Phone,New Contract,8,31.95,2026,202624
+24,Phone,Partner Central Access,45,30.2133333333333,2026,202624
+24,Phone,Pre-Onboarding,14,19.3285714285714,2026,202624
+24,Phone,Promotion,23,15.495652173913,2026,202624
+24,Phone,Property Classification,1,27.0,2026,202624
+24,Phone,Property Details,5,23.64,2026,202624
+24,Phone,Property Settings,123,19.9658536585366,2026,202624
+24,Phone,Rates & Inventory Changes,48,34.15,2026,202624
+24,Phone,Refund Request,42,20.4857142857143,2026,202624
+24,Phone,Room Type/Rate Plan,34,23.6294117647059,2026,202624
+24,Phone,Special Check-In Instructions,2,21.0,2026,202624
+24,Phone,Supplier Initiated Relocation,77,17.1428571428571,2026,202624
+24,Phone,Supplier Initiated Traveler Contact,1068,14.6612359550562,2026,202624
+25,Non-live,Account Takeover,2,48.0,2026,202625
+25,Non-live,Booking Information,93,20.590243902439,2026,202625
+25,Non-live,Connectivity Questions,7,18.36,2026,202625
+25,Non-live,Contact Update,2,2.4,2026,202625
+25,Non-live,Content Update,40,16.7823529411765,2026,202625
+25,Non-live,Customer Review Removal,21,24.1428571428571,2026,202625
+25,Non-live,EVC,72,17.6123076923077,2026,202625
+25,Non-live,Expedia Collect Invoice,52,22.1823529411765,2026,202625
+25,Non-live,Hotel Closure Outreach,5,22.68,2026,202625
+25,Non-live,Hotel Collect Issue,56,18.3125,2026,202625
+25,Non-live,Inventory Closeout,2,6.0,2026,202625
+25,Non-live,Known Tool Outage Issue,6,22.0,2026,202625
+25,Non-live,Live Site Investigation,10,45.375,2026,202625
+25,Non-live,New Contract,1,11.4,2026,202625
+25,Non-live,Partner Central Access,40,18.3942857142857,2026,202625
+25,Non-live,Pre-Onboarding,6,12.12,2026,202625
+25,Non-live,Promotion,31,14.5142857142857,2026,202625
+25,Non-live,Property Classification,2,39.9,2026,202625
+25,Non-live,Property Details,32,9.88965517241379,2026,202625
+25,Non-live,Property Photos,5,14.1,2026,202625
+25,Non-live,Property Settings,104,15.5349397590361,2026,202625
+25,Non-live,Rates & Inventory Changes,65,14.892,2026,202625
+25,Non-live,Refund Request,69,17.85,2026,202625
+25,Non-live,Room Type/Rate Plan,81,25.903125,2026,202625
+25,Non-live,Special Check-In Instructions,15,33.3,2026,202625
+25,Non-live,Supplier Initiated Relocation,12,15.75,2026,202625
+25,Non-live,Supplier Initiated Traveler Contact,854,9.97185185185186,2026,202625
+25,Phone,Booking Information,161,22.7068322981366,2026,202625
+25,Phone,Connectivity Questions,5,17.28,2026,202625
+25,Phone,Contact Update,1,11.4,2026,202625
+25,Phone,Content Update,34,21.4764705882353,2026,202625
+25,Phone,Customer Review Removal,10,21.06,2026,202625
+25,Phone,EVC,229,18.9379912663756,2026,202625
+25,Phone,Expedia Collect Invoice,131,15.6045801526718,2026,202625
+25,Phone,Hotel Collect Issue,152,16.7801324503311,2026,202625
+25,Phone,Inventory Closeout,4,21.45,2026,202625
+25,Phone,Known Tool Outage Issue,4,39.45,2026,202625
+25,Phone,Live Site Investigation,9,35.2666666666667,2026,202625
+25,Phone,New Contract,8,31.875,2026,202625
+25,Phone,Partner Central Access,41,29.1658536585366,2026,202625
+25,Phone,Pre-Onboarding,22,24.3272727272727,2026,202625
+25,Phone,Promotion,26,18.0461538461538,2026,202625
+25,Phone,Property Classification,1,5.4,2026,202625
+25,Phone,Property Details,8,26.325,2026,202625
+25,Phone,Property Photos,1,117.6,2026,202625
+25,Phone,Property Settings,107,23.5177570093458,2026,202625
+25,Phone,Rates & Inventory Changes,46,26.9869565217391,2026,202625
+25,Phone,Refund Request,31,20.941935483871,2026,202625
+25,Phone,Room Type/Rate Plan,46,26.204347826087,2026,202625
+25,Phone,Special Check-In Instructions,1,29.4,2026,202625
+25,Phone,Supplier Initiated Relocation,89,16.2337078651685,2026,202625
+25,Phone,Supplier Initiated Traveler Contact,1009,13.7791873141725,2026,202625
+26,Non-live,Account Takeover,2,33.9,2026,202626
+26,Non-live,Booking Information,82,29.4394736842105,2026,202626
+26,Non-live,Connectivity Questions,7,27.75,2026,202626
+26,Non-live,Contact Update,4,24.75,2026,202626
+26,Non-live,Content Update,37,12.5111111111111,2026,202626
+26,Non-live,Customer Review Removal,28,20.9111111111111,2026,202626
+26,Non-live,EVC,77,18.9794117647059,2026,202626
+26,Non-live,Expedia Collect Invoice,48,14.1658536585366,2026,202626
+26,Non-live,Hotel Closure Outreach,4,13.35,2026,202626
+26,Non-live,Hotel Collect Issue,47,14.1157894736842,2026,202626
+26,Non-live,Inventory Closeout,1,51.6,2026,202626
+26,Non-live,Known Tool Outage Issue,1,11.4,2026,202626
+26,Non-live,Live Site Investigation,8,20.175,2026,202626
+26,Non-live,New Contract,4,37.8,2026,202626
+26,Non-live,Partner Central Access,32,23.4,2026,202626
+26,Non-live,Pre-Onboarding,3,7.8,2026,202626
+26,Non-live,Promotion,28,12.9714285714286,2026,202626
+26,Non-live,Property Classification,7,12.1714285714286,2026,202626
+26,Non-live,Property Details,45,6.37058823529412,2026,202626
+26,Non-live,Property Photos,2,51.0,2026,202626
+26,Non-live,Property Settings,137,13.1027027027027,2026,202626
+26,Non-live,Rates & Inventory Changes,71,27.978947368421,2026,202626
+26,Non-live,Refund Request,77,15.3698630136986,2026,202626
+26,Non-live,Room Type/Rate Plan,125,12.95,2026,202626
+26,Non-live,Special Check-In Instructions,15,13.0363636363636,2026,202626
+26,Non-live,Supplier Initiated Relocation,7,23.0,2026,202626
+26,Non-live,Supplier Initiated Traveler Contact,841,9.1080604534005,2026,202626
+26,Phone,Booking Information,187,22.8770053475936,2026,202626
+26,Phone,Connectivity Questions,12,20.2,2026,202626
+26,Phone,Contact Update,3,16.4,2026,202626
+26,Phone,Content Update,49,25.5918367346939,2026,202626
+26,Phone,Customer Review Removal,4,18.15,2026,202626
+26,Phone,EVC,185,18.4021621621622,2026,202626
+26,Phone,Expedia Collect Invoice,106,20.1169811320755,2026,202626
+26,Phone,Hotel Collect Issue,155,18.0116883116883,2026,202626
+26,Phone,Inventory Closeout,1,89.4,2026,202626
+26,Phone,Known Tool Outage Issue,5,24.84,2026,202626
+26,Phone,Live Site Investigation,9,56.2666666666667,2026,202626
+26,Phone,New Contract,16,34.0875,2026,202626
+26,Phone,Partner Central Access,26,35.3307692307692,2026,202626
+26,Phone,Pre-Onboarding,12,30.4,2026,202626
+26,Phone,Promotion,35,20.3828571428571,2026,202626
+26,Phone,Property Details,8,14.25,2026,202626
+26,Phone,Property Photos,1,30.0,2026,202626
+26,Phone,Property Settings,91,20.1230769230769,2026,202626
+26,Phone,Rates & Inventory Changes,47,33.1148936170213,2026,202626
+26,Phone,Refund Request,32,22.21875,2026,202626
+26,Phone,Room Type/Rate Plan,35,22.1314285714286,2026,202626
+26,Phone,Supplier Initiated Relocation,78,17.7153846153846,2026,202626
+26,Phone,Supplier Initiated Traveler Contact,968,13.4578512396694,2026,202626
+27,Non-live,Account Takeover,1,13.2,2026,202627
+27,Non-live,Booking Information,63,25.9894736842105,2026,202627
+27,Non-live,Connectivity Questions,13,17.6727272727273,2026,202627
+27,Non-live,Content Update,25,24.7090909090909,2026,202627
+27,Non-live,Customer Review Removal,21,18.5428571428571,2026,202627
+27,Non-live,EVC,83,17.6962025316456,2026,202627
+27,Non-live,Expedia Collect Invoice,39,21.6882352941176,2026,202627
+27,Non-live,Hotel Closure Outreach,9,28.6,2026,202627
+27,Non-live,Hotel Collect Issue,36,15.0214285714286,2026,202627
+27,Non-live,Inventory Closeout,4,22.6,2026,202627
+27,Non-live,Known Tool Outage Issue,5,35.04,2026,202627
+27,Non-live,Live Site Investigation,9,24.8666666666667,2026,202627
+27,Non-live,New Contract,2,63.9,2026,202627
+27,Non-live,Partner Central Access,25,27.0,2026,202627
+27,Non-live,Pre-Onboarding,1,0.0,2026,202627
+27,Non-live,Promotion,11,16.3,2026,202627
+27,Non-live,Property Classification,2,27.6,2026,202627
+27,Non-live,Property Details,25,8.42727272727273,2026,202627
+27,Non-live,Property Photos,2,20.7,2026,202627
+27,Non-live,Property Settings,72,14.91,2026,202627
+27,Non-live,Rates & Inventory Changes,90,15.5298701298701,2026,202627
+27,Non-live,Refund Request,69,14.8941176470588,2026,202627
+27,Non-live,Room Type/Rate Plan,93,19.9682926829268,2026,202627
+27,Non-live,Special Check-In Instructions,8,18.525,2026,202627
+27,Non-live,Supplier Initiated Relocation,18,19.8,2026,202627
+27,Non-live,Supplier Initiated Traveler Contact,607,10.5291666666667,2026,202627
+27,Phone,Booking Information,236,19.5101694915254,2026,202627
+27,Phone,Connectivity Questions,10,20.64,2026,202627
+27,Phone,Contact Update,1,50.4,2026,202627
+27,Phone,Content Update,42,28.0428571428571,2026,202627
+27,Phone,Customer Review Removal,4,17.4,2026,202627
+27,Phone,EVC,192,17.1329842931937,2026,202627
+27,Phone,Expedia Collect Invoice,129,19.1674418604651,2026,202627
+27,Phone,Hotel Collect Issue,146,15.9082191780822,2026,202627
+27,Phone,Inventory Closeout,2,24.9,2026,202627
+27,Phone,Known Tool Outage Issue,3,16.4,2026,202627
+27,Phone,Live Site Investigation,15,41.68,2026,202627
+27,Phone,New Contract,5,13.56,2026,202627
+27,Phone,Partner Central Access,47,33.1276595744681,2026,202627
+27,Phone,Pre-Onboarding,11,16.9090909090909,2026,202627
+27,Phone,Promotion,20,26.49,2026,202627
+27,Phone,Property Details,8,26.55,2026,202627
+27,Phone,Property Photos,1,22.8,2026,202627
+27,Phone,Property Settings,93,18.4645161290323,2026,202627
+27,Phone,Rates & Inventory Changes,58,28.5310344827586,2026,202627
+27,Phone,Refund Request,37,17.2540540540541,2026,202627
+27,Phone,Room Type/Rate Plan,32,23.4375,2026,202627
+27,Phone,Special Check-In Instructions,1,26.4,2026,202627
+27,Phone,Supplier Initiated Relocation,58,16.8827586206897,2026,202627
+27,Phone,Supplier Initiated Traveler Contact,949,12.0916754478398,2026,202627
+28,Non-live,Account Takeover,6,15.36,2026,202628
+28,Non-live,Booking Information,63,29.7157894736842,2026,202628
+28,Non-live,Connectivity Questions,14,13.1571428571429,2026,202628
+28,Non-live,Contact Update,7,9.08571428571429,2026,202628
+28,Non-live,Content Update,35,22.14375,2026,202628
+28,Non-live,Customer Review Removal,21,15.87,2026,202628
+28,Non-live,EVC,61,16.5163636363636,2026,202628
+28,Non-live,Expedia Collect Invoice,40,18.4114285714286,2026,202628
+28,Non-live,Hotel Closure Outreach,7,29.3142857142857,2026,202628
+28,Non-live,Hotel Collect Issue,66,15.6103448275862,2026,202628
+28,Non-live,Inventory Closeout,3,21.6,2026,202628
+28,Non-live,Known Tool Outage Issue,3,14.8,2026,202628
+28,Non-live,Live Site Investigation,12,48.25,2026,202628
+28,Non-live,New Contract,2,22.2,2026,202628
+28,Non-live,Partner Central Access,25,19.872,2026,202628
+28,Non-live,Pre-Onboarding,1,19.8,2026,202628
+28,Non-live,Promotion,26,5.73333333333333,2026,202628
+28,Non-live,Property Classification,25,8.8,2026,202628
+28,Non-live,Property Details,43,7.91052631578947,2026,202628
+28,Non-live,Property Photos,8,14.8285714285714,2026,202628
+28,Non-live,Property Settings,67,16.6754716981132,2026,202628
+28,Non-live,Rates & Inventory Changes,70,20.7677419354839,2026,202628
+28,Non-live,Refund Request,69,12.9044776119403,2026,202628
+28,Non-live,Room Type/Rate Plan,107,17.3934065934066,2026,202628
+28,Non-live,Special Check-In Instructions,12,10.2,2026,202628
+28,Non-live,Supplier Initiated Relocation,14,18.9,2026,202628
+28,Non-live,Supplier Initiated Traveler Contact,564,10.0018450184502,2026,202628
+28,Phone,Booking Information,210,18.5428571428571,2026,202628
+28,Phone,Connectivity Questions,8,12.375,2026,202628
+28,Phone,Contact Update,3,26.8,2026,202628
+28,Phone,Content Update,43,34.0046511627907,2026,202628
+28,Phone,Customer Review Removal,6,21.0,2026,202628
+28,Phone,EVC,198,16.3522842639594,2026,202628
+28,Phone,Expedia Collect Invoice,150,17.74,2026,202628
+28,Phone,Hotel Collect Issue,192,15.459375,2026,202628
+28,Phone,Inventory Closeout,1,52.2,2026,202628
+28,Phone,Known Tool Outage Issue,4,18.45,2026,202628
+28,Phone,Live Site Investigation,9,28.4,2026,202628
+28,Phone,New Contract,17,29.5058823529412,2026,202628
+28,Phone,Partner Central Access,29,26.4206896551724,2026,202628
+28,Phone,Pre-Onboarding,16,18.9375,2026,202628
+28,Phone,Promotion,28,14.8285714285714,2026,202628
+28,Phone,Property Classification,2,81.9,2026,202628
+28,Phone,Property Details,4,36.45,2026,202628
+28,Phone,Property Photos,2,33.9,2026,202628
+28,Phone,Property Settings,90,15.2133333333333,2026,202628
+28,Phone,Rates & Inventory Changes,53,28.3384615384615,2026,202628
+28,Phone,Refund Request,41,19.6975609756098,2026,202628
+28,Phone,Room Type/Rate Plan,38,19.4368421052632,2026,202628
+28,Phone,Supplier Initiated Relocation,71,17.0112676056338,2026,202628
+28,Phone,Supplier Initiated Traveler Contact,966,11.4521739130435,2026,202628
+29,Non-live,Account Takeover,2,19.2,2026,202629
+29,Non-live,Booking Information,57,21.5653846153846,2026,202629
+29,Non-live,Connectivity Questions,5,10.5,2026,202629
+29,Non-live,Contact Update,1,37.2,2026,202629
+29,Non-live,Content Update,28,16.008,2026,202629
+29,Non-live,Customer Review Removal,16,30.08,2026,202629
+29,Non-live,EVC,50,17.5714285714286,2026,202629
+29,Non-live,Expedia Collect Invoice,29,15.624,2026,202629
+29,Non-live,Hotel Closure Outreach,8,18.75,2026,202629
+29,Non-live,Hotel Collect Issue,51,21.5828571428571,2026,202629
+29,Non-live,Inventory Closeout,1,10.8,2026,202629
+29,Non-live,Known Tool Outage Issue,2,19.2,2026,202629
+29,Non-live,Live Site Investigation,9,38.85,2026,202629
+29,Non-live,New Contract,5,29.1,2026,202629
+29,Non-live,Partner Central Access,27,20.2,2026,202629
+29,Non-live,Pre-Onboarding,1,9.0,2026,202629
+29,Non-live,Promotion,25,16.9058823529412,2026,202629
+29,Non-live,Property Classification,1,7.8,2026,202629
+29,Non-live,Property Details,20,12.9176470588235,2026,202629
+29,Non-live,Property Photos,1,0.0,2026,202629
+29,Non-live,Property Settings,60,12.6125,2026,202629
+29,Non-live,Rates & Inventory Changes,55,24.9818181818182,2026,202629
+29,Non-live,Refund Request,55,13.6075471698113,2026,202629
+29,Non-live,Room Type/Rate Plan,86,20.9210526315789,2026,202629
+29,Non-live,Special Check-In Instructions,7,41.25,2026,202629
+29,Non-live,Supplier Initiated Relocation,25,15.7666666666667,2026,202629
+29,Non-live,Supplier Initiated Traveler Contact,542,10.996875,2026,202629
+29,Phone,Booking Information,214,20.088785046729,2026,202629
+29,Phone,Connectivity Questions,8,35.175,2026,202629
+29,Phone,Contact Update,3,10.6,2026,202629
+29,Phone,Content Update,30,24.0827586206896,2026,202629
+29,Phone,Customer Review Removal,8,18.225,2026,202629
+29,Phone,EVC,155,15.0309677419355,2026,202629
+29,Phone,Expedia Collect Invoice,97,16.6453608247423,2026,202629
+29,Phone,Hotel Collect Issue,129,15.3720930232558,2026,202629
+29,Phone,Inventory Closeout,1,23.4,2026,202629
+29,Phone,Known Tool Outage Issue,1,8.4,2026,202629
+29,Phone,Live Site Investigation,10,41.52,2026,202629
+29,Phone,New Contract,12,22.6,2026,202629
+29,Phone,Partner Central Access,34,40.2352941176471,2026,202629
+29,Phone,Pre-Onboarding,10,18.06,2026,202629
+29,Phone,Promotion,28,17.1333333333333,2026,202629
+29,Phone,Property Details,7,14.3142857142857,2026,202629
+29,Phone,Property Photos,3,29.2,2026,202629
+29,Phone,Property Settings,87,15.648275862069,2026,202629
+29,Phone,Rates & Inventory Changes,51,22.7882352941176,2026,202629
+29,Phone,Refund Request,19,17.6526315789474,2026,202629
+29,Phone,Room Type/Rate Plan,36,27.5666666666667,2026,202629
+29,Phone,Special Check-In Instructions,1,9.6,2026,202629
+29,Phone,Supplier Initiated Relocation,59,15.6,2026,202629
+29,Phone,Supplier Initiated Traveler Contact,911,10.2993377483444,2026,202629
+30,Non-live,Account Takeover,2,16.8,2026,202630
+30,Non-live,Booking Information,33,37.5461538461538,2026,202630
+30,Non-live,Connectivity Questions,5,7.5,2026,202630
+30,Non-live,Content Update,12,19.02,2026,202630
+30,Non-live,Customer Review Removal,10,18.0,2026,202630
+30,Non-live,EVC,15,38.4461538461538,2026,202630
+30,Non-live,Expedia Collect Invoice,9,22.6285714285714,2026,202630
+30,Non-live,Hotel Closure Outreach,3,18.2,2026,202630
+30,Non-live,Hotel Collect Issue,21,24.225,2026,202630
+30,Non-live,Inventory Closeout,2,12.6,2026,202630
+30,Non-live,Live Site Investigation,3,28.6,2026,202630
+30,Non-live,New Contract,2,12.0,2026,202630
+30,Non-live,Partner Central Access,19,40.575,2026,202630
+30,Non-live,Pre-Onboarding,1,7.8,2026,202630
+30,Non-live,Promotion,16,47.28,2026,202630
+30,Non-live,Property Details,13,15.8727272727273,2026,202630
+30,Non-live,Property Photos,1,21.0,2026,202630
+30,Non-live,Property Settings,26,22.4333333333333,2026,202630
+30,Non-live,Rates & Inventory Changes,56,20.0830188679245,2026,202630
+30,Non-live,Refund Request,37,16.9885714285714,2026,202630
+30,Non-live,Room Type/Rate Plan,104,18.5470588235294,2026,202630
+30,Non-live,Special Check-In Instructions,8,9.45,2026,202630
+30,Non-live,Supplier Initiated Relocation,24,13.8,2026,202630
+30,Non-live,Supplier Initiated Traveler Contact,668,10.4572741194487,2026,202630
+30,Phone,Booking Information,266,18.5772727272727,2026,202630
+30,Phone,Connectivity Questions,11,19.9090909090909,2026,202630
+30,Phone,Content Update,36,17.2833333333333,2026,202630
+30,Phone,Customer Review Removal,5,46.8,2026,202630
+30,Phone,EVC,179,15.0168539325843,2026,202630
+30,Phone,Expedia Collect Invoice,98,16.3897959183673,2026,202630
+30,Phone,Hotel Collect Issue,175,17.5803468208092,2026,202630
+30,Phone,Known Tool Outage Issue,2,70.2,2026,202630
+30,Phone,Live Site Investigation,7,31.3714285714286,2026,202630
+30,Phone,New Contract,18,18.2823529411765,2026,202630
+30,Phone,Partner Central Access,20,28.9263157894737,2026,202630
+30,Phone,Pre-Onboarding,13,11.8615384615385,2026,202630
+30,Phone,Promotion,20,18.66,2026,202630
+30,Phone,Property Details,8,8.775,2026,202630
+30,Phone,Property Settings,91,16.3933333333333,2026,202630
+30,Phone,Rates & Inventory Changes,50,27.552,2026,202630
+30,Phone,Refund Request,31,15.6387096774194,2026,202630
+30,Phone,Room Type/Rate Plan,36,21.12,2026,202630
+30,Phone,Special Check-In Instructions,1,15.6,2026,202630
+30,Phone,Supplier Initiated Relocation,72,14.8732394366197,2026,202630
+30,Phone,Supplier Initiated Traveler Contact,1069,11.7900282220132,2026,202630
+31,Non-live,Account Takeover,3,25.6,2026,202631
+31,Non-live,Booking Information,25,19.95,2026,202631
+31,Non-live,Connectivity Questions,5,68.4,2026,202631
+31,Non-live,Contact Update,1,0.0,2026,202631
+31,Non-live,Content Update,3,45.9,2026,202631
+31,Non-live,Customer Review Removal,28,19.5777777777778,2026,202631
+31,Non-live,EVC,17,19.4666666666667,2026,202631
+31,Non-live,Expedia Collect Invoice,12,38.85,2026,202631
+31,Non-live,Hotel Closure Outreach,7,12.2571428571429,2026,202631
+31,Non-live,Hotel Collect Issue,16,20.7818181818182,2026,202631
+31,Non-live,Inventory Closeout,1,0.0,2026,202631
+31,Non-live,Known Tool Outage Issue,3,36.3,2026,202631
+31,Non-live,Live Site Investigation,3,26.2,2026,202631
+31,Non-live,New Contract,2,62.7,2026,202631
+31,Non-live,Partner Central Access,12,21.5,2026,202631
+31,Non-live,Pre-Onboarding,2,6.6,2026,202631
+31,Non-live,Promotion,12,13.8,2026,202631
+31,Non-live,Property Classification,1,8.4,2026,202631
+31,Non-live,Property Details,2,6.0,2026,202631
+31,Non-live,Property Settings,23,23.6142857142857,2026,202631
+31,Non-live,Rates & Inventory Changes,73,21.9582089552239,2026,202631
+31,Non-live,Refund Request,28,13.9285714285714,2026,202631
+31,Non-live,Room Type/Rate Plan,107,17.388,2026,202631
+31,Non-live,Special Check-In Instructions,5,27.6,2026,202631
+31,Non-live,Supplier Initiated Relocation,20,13.56,2026,202631
+31,Non-live,Supplier Initiated Traveler Contact,528,9.87425149700599,2026,202631
+31,Phone,Booking Information,248,19.0663967611336,2026,202631
+31,Phone,Connectivity Questions,3,10.6,2026,202631
+31,Phone,Content Update,51,19.6352941176471,2026,202631
+31,Phone,Customer Review Removal,9,24.1333333333333,2026,202631
+31,Phone,EVC,139,18.1956521739131,2026,202631
+31,Phone,Expedia Collect Invoice,89,13.8539325842697,2026,202631
+31,Phone,Hotel Collect Issue,172,16.5627906976744,2026,202631
+31,Phone,Inventory Closeout,1,30.6,2026,202631
+31,Phone,Known Tool Outage Issue,7,28.7142857142857,2026,202631
+31,Phone,Live Site Investigation,4,34.65,2026,202631
+31,Phone,New Contract,12,19.8,2026,202631
+31,Phone,Partner Central Access,34,29.0470588235294,2026,202631
+31,Phone,Pre-Onboarding,16,25.425,2026,202631
+31,Phone,Promotion,21,17.8857142857143,2026,202631
+31,Phone,Property Details,2,22.2,2026,202631
+31,Phone,Property Photos,1,13.2,2026,202631
+31,Phone,Property Settings,75,16.456,2026,202631
+31,Phone,Rates & Inventory Changes,56,25.7236363636364,2026,202631
+31,Phone,Refund Request,30,14.58,2026,202631
+31,Phone,Room Type/Rate Plan,31,27.6,2026,202631
+31,Phone,Special Check-In Instructions,2,53.7,2026,202631
+31,Phone,Supplier Initiated Relocation,82,13.065,2026,202631
+31,Phone,Supplier Initiated Traveler Contact,876,10.3539700805524,2026,202631
+32,Non-live,Account Takeover,6,17.9,2026,202632
+32,Non-live,Booking Information,27,21.63,2026,202632
+32,Non-live,Connectivity Questions,1,23.4,2026,202632
+32,Non-live,Contact Update,2,33.0,2026,202632
+32,Non-live,Content Update,9,14.3142857142857,2026,202632
+32,Non-live,Customer Review Removal,2,19.2,2026,202632
+32,Non-live,EVC,6,27.36,2026,202632
+32,Non-live,Expedia Collect Invoice,13,10.3714285714286,2026,202632
+32,Non-live,Hotel Closure Outreach,6,19.8,2026,202632
+32,Non-live,Hotel Collect Issue,9,17.4,2026,202632
+32,Non-live,Inventory Closeout,2,28.8,2026,202632
+32,Non-live,Live Site Investigation,3,11.6,2026,202632
+32,Non-live,New Contract,1,19.8,2026,202632
+32,Non-live,Partner Central Access,23,18.1428571428571,2026,202632
+32,Non-live,Promotion,15,16.56,2026,202632
+32,Non-live,Property Classification,1,29.4,2026,202632
+32,Non-live,Property Details,10,2.8,2026,202632
+32,Non-live,Property Photos,2,1.2,2026,202632
+32,Non-live,Property Settings,27,27.24,2026,202632
+32,Non-live,Rates & Inventory Changes,26,19.5428571428571,2026,202632
+32,Non-live,Refund Request,7,11.8,2026,202632
+32,Non-live,Room Type/Rate Plan,59,14.1446808510638,2026,202632
+32,Non-live,Special Check-In Instructions,1,11.4,2026,202632
+32,Non-live,Supplier Initiated Relocation,10,9.75,2026,202632
+32,Non-live,Supplier Initiated Traveler Contact,602,8.99895470383276,2026,202632
+32,Phone,Booking Information,277,18.4180505415162,2026,202632
+32,Phone,Connectivity Questions,11,22.7454545454545,2026,202632
+32,Phone,Content Update,22,24.2454545454545,2026,202632
+32,Phone,Customer Review Removal,9,18.6,2026,202632
+32,Phone,EVC,164,15.559756097561,2026,202632
+32,Phone,Expedia Collect Invoice,95,16.2126315789474,2026,202632
+32,Phone,Hotel Collect Issue,213,17.3887323943662,2026,202632
+32,Phone,Inventory Closeout,1,12.0,2026,202632
+32,Phone,Known Tool Outage Issue,4,53.7,2026,202632
+32,Phone,Live Site Investigation,10,24.36,2026,202632
+32,Phone,New Contract,11,22.5818181818182,2026,202632
+32,Phone,Partner Central Access,39,26.8769230769231,2026,202632
+32,Phone,Pre-Onboarding,12,20.9,2026,202632
+32,Phone,Promotion,35,18.4971428571429,2026,202632
+32,Phone,Property Details,4,21.0,2026,202632
+32,Phone,Property Settings,94,17.0744680851064,2026,202632
+32,Phone,Rates & Inventory Changes,59,30.5389830508475,2026,202632
+32,Phone,Refund Request,31,17.5161290322581,2026,202632
+32,Phone,Room Type/Rate Plan,32,24.4125,2026,202632
+32,Phone,Supplier Initiated Relocation,103,13.8640776699029,2026,202632
+32,Phone,Supplier Initiated Traveler Contact,902,11.1917960088692,2026,202632

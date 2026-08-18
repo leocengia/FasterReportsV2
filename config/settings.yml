@@ -9,6 +9,12 @@ paths:
   input: input
   output: output
   template: template/Omni_Report_TEMPLATE.xlsm
+  # Lo storico settimanale volume/AHT per case type, che alimenta 'AHT History'
+  # e quindi 'AHT Trend WoW'. Non sta in output/ perche' quella cartella e'
+  # usa-e-getta e fuori da git: questo file e' l'unica cosa del progetto che non
+  # si ricostruisce rilanciando il programma, perche' gli export delle settimane
+  # passate non ci sono piu'. Sta in git, e va committato dopo ogni giro.
+  aht_history: data/aht_history.csv
 
 # Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
 # reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di

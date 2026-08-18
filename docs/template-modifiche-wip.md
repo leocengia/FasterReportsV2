@@ -1,4 +1,9 @@
-# Modifiche da applicare al template WIP
+# Modifiche al template WIP — tutte applicate
+
+> **Stato al 2026-08-18: fatto.** Tutti e cinque i punti sono stati applicati e
+> verificati contro il file consegnato, che e' ora il template tracciato
+> (`template/Omni_Report_TEMPLATE.xlsm`). Il documento resta come registro di
+> cosa e' stato cambiato e perche'.
 
 Destinatario: chi lavora sul template dentro Excel (l'agente Claude collegato al
 file, o Leonardo a mano). Riferimento: `Omni_Report_TEMPLATE_WIP.xlsm` con i
@@ -16,7 +21,7 @@ formattazione fatta a mano lì è al sicuro.
 
 ---
 
-## 1. `AHT History` ha due colonne nuove, e `AHT Trend WoW` deve usarne una
+## 1. `AHT History` ha due colonne nuove, e `AHT Trend WoW` deve usarne una — ✅ **fatto**
 
 **Perché.** Python scrive sette colonne, non cinque:
 
@@ -104,7 +109,7 @@ identiche a quelle che confronti con le heat map che usi già.
 
 ---
 
-## 2. `Helper CaseType`: fare spazio ai case type nuovi
+## 2. `Helper CaseType`: fare spazio ai case type nuovi — ✅ **fatto**
 
 **Perché.** Oggi le formule arrivano a riga 63 (31 case type × 2 canali) e
 l'elenco è scritto a mano. Nell'export della W33 i case type distinti erano 32,
@@ -159,7 +164,7 @@ stiamo togliendo. Se lo spazio manca, il build lo dice e non scrive.
 
 ---
 
-## 3. `CaseType Deepdive`: soglia di volume da 20 a 10
+## 3. `CaseType Deepdive`: soglia di volume da 20 a 10 — ✅ **fatto**
 
 Una cella per canale, niente formule da toccare:
 
@@ -181,7 +186,7 @@ Con 20, su 53 combinazioni presenti solo 17 venivano classificate davvero.
 
 ---
 
-## 4. Cancellare `Profilo Colonne SF`
+## 4. Cancellare `Profilo Colonne SF` — ✅ **fatto**
 
 **Si può, senza rompere niente: nessun altro foglio lo legge.** È un foglio
 diagnostico — per ognuna delle 143 colonne di `AHT_Data` conta celle popolate,
@@ -198,13 +203,16 @@ Due motivi per toglierlo:
   l'export SF ha cambiato forma (una colonna nuova, `case_has_outbound_call`,
   inserita in AC; una persa, `claim_subtype_list`).
 
-Se lo cancelli, dimmelo: ci sono otto file nel repo che lo citano (test,
-fixture, `tools/fix_profilo_colonne_sf.py`, `tools/golden_report.py`, docs) e li
-allineo io.
+Allineato nel repo il 2026-08-18: `tools/fix_profilo_colonne_sf.py` cancellato
+(esisteva solo per togliere il limite di riga da quelle formule),
+`tools/golden_report.py` non lo esclude più dal confronto, e il test sui limiti
+di riga ora **pretende** 50000 invece di accettare anche 3389 — se quel numero
+tornasse a 3389 vorrebbe dire che una formula ha di nuovo una riga finale scritta
+a mano, e va saputo.
 
 ---
 
-## 5. Nascondere `AHT History`
+## 5. Nascondere `AHT History` — ✅ **fatto**
 
 `Visible = xlSheetVeryHidden` (o semplicemente Nascondi). Le formule di
 `AHT Trend WoW` continuano a leggerlo senza problemi.

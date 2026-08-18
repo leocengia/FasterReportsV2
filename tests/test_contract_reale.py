@@ -6,8 +6,8 @@ Quando il workbook evolve — e nel W30 e' successo, tre colonne in piu' rispett
 al piano — sono questi test a dirlo.
 
 La fixture si rigenera con:
-  python tools/audit_workbook.py "samples/Omni Report W30.xlsm" \\
-      --headers --usage --tables --json > tests/fixtures/workbook_W30.json
+  python tools/audit_workbook.py template/Omni_Report_TEMPLATE.xlsm \\
+      --headers --usage --tables --json > tests/fixtures/workbook_template.json
 """
 
 from __future__ import annotations
@@ -17,11 +17,13 @@ import pytest
 from fasterreports.core.matcher import VIA_EXACT, resolve_dataset
 
 # Colonne che compaiono nelle formule ma non sono dati di input.
-IGNORE_USAGE = {
-    # 'Profilo Colonne SF' usa SF_DATABASE!$A come angolo di un INDEX su tutto
-    # il foglio, non come campo: e' un profilatore di colonne, non un consumatore.
-    ("SF_DATABASE", "A"),
-}
+#
+# Vuoto dal 2026-08-18: l'unica voce era SF_DATABASE!A, che 'Profilo Colonne SF'
+# usava come angolo di un INDEX su tutto il foglio invece che come campo. Quel
+# foglio e' stato cancellato dal template (diagnostico, nessun lettore, 143
+# formule ad array a ogni ricalcolo), e nel frattempo la colonna A e' diventata
+# un campo vero: 'Date Viewpoint'. Tenere l'esenzione la nasconderebbe.
+IGNORE_USAGE: set[tuple[str, str]] = set()
 
 
 def test_ogni_campo_aggancia_la_colonna_giusta(contract, real_headers):

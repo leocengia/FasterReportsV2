@@ -1,5 +1,5 @@
 {
-  "workbook": "Omni Report W30.xlsm",
+  "workbook": "Omni_Report_TEMPLATE.xlsm",
   "headers": {
     "AT_DATASET": {
       "dimension": "A1:Q130000",
@@ -408,16 +408,15 @@
       ]
     },
     "SF_DATABASE": {
-      "A": [
-        "Profilo Colonne SF"
-      ],
       "U": [
         "AHT Outliers",
+        "Helper CaseType",
         "Report Agenti",
         "Verifica AHT"
       ],
       "Z": [
-        "AHT Outliers"
+        "AHT Outliers",
+        "Helper CaseType"
       ],
       "AC": [
         "Report Agenti"
@@ -438,6 +437,7 @@
       "DY": [
         "AHT Outliers",
         "AHT Outliers Export",
+        "Helper CaseType",
         "Report Agenti",
         "Verifica AHT"
       ],
@@ -446,6 +446,9 @@
       ],
       "EI": [
         "Report Agenti"
+      ],
+      "EJ": [
+        "Helper CaseType"
       ]
     },
     "PSAT_DATASET": {

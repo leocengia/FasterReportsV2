@@ -49,6 +49,10 @@ class Settings:
     # ricostruire rilanciando il programma, perche' gli export delle settimane
     # passate non li abbiamo piu'. Va versionato.
     aht_history: Path = Path("data/aht_history.csv")
+    # Case type che non entrano nel trend settimanale. Vedi il commento in
+    # settings.yml: la lista e' ricavata dalle 11 settimane di storico curate a
+    # mano, non scelta a tavolino.
+    casetype_esclusi: tuple[str, ...] = ()
     input_files: dict[str, str] = field(default_factory=dict)
     workbook_name: str = "Omni_Report_W{week}.xlsm"
     preflight_name: str = "preflight_W{week}.txt"
@@ -226,6 +230,10 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
         output_dir=resolve(paths.get("output", "output")),
         template=resolve(paths.get("template", "template/Omni_Report_TEMPLATE.xlsm")),
         aht_history=resolve(paths.get("aht_history", "data/aht_history.csv")),
+        casetype_esclusi=_str_tuple(
+            (raw.get("aht_history") or {}).get("casetype_esclusi"),
+            "aht_history.casetype_esclusi",
+        ) or (),
         input_files=dict(raw.get("input_files") or {}),
         workbook_name=str(out.get("workbook_name", "Omni_Report_W{week}.xlsm")),
         preflight_name=str(out.get("preflight_name", "preflight_W{week}.txt")),

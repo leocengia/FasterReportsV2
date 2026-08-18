@@ -16,6 +16,34 @@ paths:
   # passate non ci sono piu'. Sta in git, e va committato dopo ogni giro.
   aht_history: data/aht_history.csv
 
+# ---------------------------------------------------------------------------
+# Il trend settimanale (foglio 'AHT History' -> heat map di 'AHT Trend WoW')
+# ---------------------------------------------------------------------------
+aht_history:
+  # Case type che NON entrano nel trend. Non e' un filtro di rumore: sono tipi
+  # di caso che non rappresentano lavoro confrontabile, e mescolarli agli altri
+  # sposterebbe le medie senza dire niente di utile. Il volume non c'entra —
+  # nel W30 'Call Assignment' aveva 76 casi, piu' di meta' delle combinazioni
+  # incluse, ed era comunque tenuto fuori.
+  #
+  # Restano nei dati grezzi di SF_DATABASE e in 'Helper CaseType': escluderli
+  # dal trend non vuol dire buttarli.
+  #
+  # QUESTA LISTA E' RICAVATA, NON INVENTATA. Confrontando i dati del W30 con le
+  # 11 settimane di storico gia' presenti nel template (W22-W32, curate a mano
+  # dal file WOW), questi otto case type avevano casi in ogni settimana e non
+  # comparivano MAI nello storico. E' la curatela che facevi a mano, scritta.
+  # Se una di queste righe non ti torna, togliila: e' un file di testo.
+  casetype_esclusi:
+    - "Booking Research (Rates)"
+    - "Booking Research (Settings)"
+    - "Bulk Update Request"
+    - "Call Assignment"
+    - "Partner Tool Issue"
+    - "Proactive Outreach Project"
+    - "Promotion Content Request"
+    - "Specialty Functions"
+
 # Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
 # reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di
 # settimana e' nel nome e cambia ogni volta, e l'estensione dipende da chi

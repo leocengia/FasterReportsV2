@@ -379,6 +379,7 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         column_stats={n: b.stats for n, b in blocks.items() if b.stats},
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
+        casetype_esclusi=settings.casetype_esclusi,
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
         turni_rows=turni.rows if turni else None,
@@ -745,7 +746,9 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
         )]
 
     iso_year, week = settimana
-    nuove = aggrega(terne, iso_year=iso_year, week=week)
+    nuove = aggrega(
+        terne, iso_year=iso_year, week=week, esclusi=settings.casetype_esclusi
+    )
     storico = unisci(carica(settings.aht_history), nuove)
     scrivi(settings.aht_history, storico)
 

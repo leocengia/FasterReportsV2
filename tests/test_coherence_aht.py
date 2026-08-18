@@ -127,10 +127,40 @@ def test_segnala_i_case_type_nuovi_elencandoli():
     (f,) = trova(rep, "case type nuovi")
     assert f.level == SEGNALA
     assert "2 combinazioni" in f.summary
-    assert "Phone | Call Assignment" in f.details
+    assert any("Phone | Call Assignment" in d for d in f.details)
     assert "CaseType Deepdive" in f.hint
     # Non blocca: i numeri finiscono comunque nell'helper, non si perde nulla.
     assert rep.ok
+
+
+def test_distingue_i_nuovi_che_entrano_nel_trend_da_quelli_esclusi():
+    """La conseguenza che conta e' sul trend: un case type nuovo NON escluso
+    compare da questa settimana nelle heat map, dove prima non c'era, e il
+    grafico cambia forma senza che nulla lo dica."""
+    rep = check_sources(
+        casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")],
+        casetype_esclusi=("Call Assignment",),
+    )
+    (f,) = trova(rep, "case type nuovi")
+
+    assert "1 entrano nel trend" in f.summary
+    entra = [d for d in f.details if "ENTRA" in d]
+    assert entra == ["Non-live | Collections   -> ENTRA nel trend"]
+    assert any("Call Assignment" in d and "escluso dal trend" in d for d in f.details)
+    assert "casetype_esclusi" in f.hint
+
+
+def test_se_tutti_i_nuovi_sono_esclusi_non_si_parla_di_trend():
+    """Niente cambia nelle heat map: il suggerimento su come escluderli sarebbe
+    rumore."""
+    rep = check_sources(
+        casetype_nuovi=[("Phone", "Call Assignment")],
+        casetype_esclusi=("call assignment",),  # confronto insensibile al caso
+    )
+    (f,) = trova(rep, "case type nuovi")
+    assert "entrano nel trend" not in f.summary
+    assert "ENTRA" not in "".join(f.details)
+    assert "casetype_esclusi" not in f.hint
 
 
 def test_nessun_case_type_nuovo_non_dice_niente():

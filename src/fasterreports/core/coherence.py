@@ -96,6 +96,7 @@ def check_sources(
     column_stats: dict[str, dict] | None = None,
     date_viewpoint: list | None = None,
     casetype_nuovi: list[tuple[str, str]] | None = None,
+    casetype_esclusi: tuple[str, ...] = (),
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -142,7 +143,7 @@ def check_sources(
     if date_viewpoint:
         _check_date_viewpoint(rep, date_viewpoint, week_inferred)
     if casetype_nuovi:
-        _check_casetype_nuovi(rep, casetype_nuovi)
+        _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -402,25 +403,49 @@ def _check_date_viewpoint(rep, valori: list, week_inferred) -> None:
             ))
 
 
-def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]]) -> None:
+def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], esclusi=()) -> None:
     """Case type nei dati che il template non conosceva.
 
     Vengono appesi automaticamente a 'Helper CaseType', quindi non si perde
-    niente — ma `CaseType Deepdive` mostra una lista curata a mano, e quelli
-    nuovi non compaiono lì finche' non li aggiungi tu. Detto, non taciuto:
-    nella W33 erano 4, e uno ('Call Assignment', 30 casi) superava la soglia
-    di volume, cioe' era un risultato vero che nessuno avrebbe visto.
+    niente. Ma la conseguenza da segnalare e' un'altra, e riguarda il trend:
+    un case type nuovo che non e' nella lista delle esclusioni **entra nelle
+    heat map**, dove finora non c'era. Il grafico cambia forma, e chi lo guarda
+    la settimana dopo non ha modo di sapere perche'.
+
+    Quindi i nuovi si dividono in due, e i due gruppi vogliono azioni diverse:
+    quelli esclusi non richiedono niente, gli altri richiedono una decisione —
+    tenerli nel trend o aggiungerli a `aht_history.casetype_esclusi`.
     """
+    fuori = {str(t).strip().casefold() for t in esclusi}
+    nel_trend = [(c, t) for c, t in nuovi if t.strip().casefold() not in fuori]
+    fuori_trend = [(c, t) for c, t in nuovi if t.strip().casefold() in fuori]
+
+    dettagli = [f"{c} | {t}   -> ENTRA nel trend" for c, t in nel_trend]
+    dettagli += [f"{c} | {t}   (escluso dal trend)" for c, t in fuori_trend]
+
+    hint = (
+        "Sono stati appesi in fondo a 'Helper CaseType', quindi i loro numeri\n"
+        "esistono e sono corretti. Non compaiono in 'CaseType Deepdive', che ha una\n"
+        "lista curata a mano: se uno di questi ti interessa, aggiungilo lì."
+    )
+    if nel_trend:
+        hint += (
+            "\nQuelli marcati ENTRA compaiono da questa settimana nelle heat map di\n"
+            "'AHT Trend WoW', dove prima non c'erano. Se non devono starci, aggiungili\n"
+            "a aht_history.casetype_esclusi in settings.yml e rilancia: lo storico si\n"
+            "riscrive, non si somma."
+        )
+
     rep.add(Finding(
         check="case type nuovi",
         level=SEGNALA,
-        summary=f"{len(nuovi)} combinazioni (canale, case type) non erano in 'Helper CaseType'",
-        details=[f"{canale} | {ct}" for canale, ct in nuovi],
-        hint=(
-            "Sono state appese in fondo a 'Helper CaseType', quindi i loro numeri\n"
-            "esistono e sono corretti. Non compaiono in 'CaseType Deepdive', che ha una\n"
-            "lista curata a mano: se uno di questi ti interessa, aggiungilo lì."
+        summary=(
+            f"{len(nuovi)} combinazioni (canale, case type) non erano in "
+            f"'Helper CaseType'"
+            + (f", di cui {len(nel_trend)} entrano nel trend" if nel_trend else "")
         ),
+        details=dettagli,
+        hint=hint,
     ))
 
 

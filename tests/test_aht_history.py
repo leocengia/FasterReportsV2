@@ -306,3 +306,69 @@ def test_su_dati_reali_i_conti_tornano():
     assert atteso[("Phone", "Supplier Initiated Traveler Contact")][1] == pytest.approx(
         10.4425, abs=1e-3
     )
+
+
+# ---------------------------------------------------------------------------
+# Case type esclusi dal trend
+#
+# Non e' un filtro di rumore: sono tipi di caso che non rappresentano lavoro
+# confrontabile. Nel W30 'Call Assignment' aveva 76 casi — piu' di meta' delle
+# combinazioni incluse — ed era comunque tenuto fuori dalle heat map.
+# ---------------------------------------------------------------------------
+
+
+def test_esclude_i_case_type_indicati():
+    righe = [
+        ("Phone", "EVC", 10.0),
+        ("Phone", "Call Assignment", 3.0),
+        ("Other", "Specialty Functions", 8.0),
+    ]
+    out = aggrega(righe, iso_year=2026, week=33,
+                  esclusi=("Call Assignment", "Specialty Functions"))
+    assert [(r.channel, r.case_type) for r in out] == [("Phone", "EVC")]
+
+
+def test_lesclusione_non_guarda_il_volume():
+    """76 casi e resta fuori: la decisione e' sul tipo di caso, non sulla taglia."""
+    righe = [("Phone", "Call Assignment", 3.0)] * 76 + [("Phone", "EVC", 10.0)]
+    out = aggrega(righe, iso_year=2026, week=33, esclusi=("Call Assignment",))
+    assert [r.case_type for r in out] == ["EVC"]
+
+
+def test_lesclusione_e_insensibile_a_caso_e_spazi():
+    righe = [("Phone", "  Call Assignment ", 3.0), ("Phone", "EVC", 1.0)]
+    out = aggrega(righe, iso_year=2026, week=33, esclusi=("call assignment",))
+    assert [r.case_type for r in out] == ["EVC"]
+
+
+def test_escludere_su_entrambi_i_canali():
+    """Un case type escluso esce da tutti i canali, non solo da quello dove
+    l'hai notato."""
+    righe = [("Phone", "Specialty Functions", 1.0), ("Other", "Specialty Functions", 2.0)]
+    assert aggrega(righe, iso_year=2026, week=33, esclusi=("Specialty Functions",)) == []
+
+
+def test_senza_esclusioni_entra_tutto():
+    righe = [("Phone", "Call Assignment", 3.0), ("Phone", "EVC", 1.0)]
+    assert len(aggrega(righe, iso_year=2026, week=33)) == 2
+
+
+def test_le_esclusioni_del_repo_corrispondono_alla_curatela_storica():
+    """La lista in settings.yml non e' scelta a tavolino: e' ricavata dalle 11
+    settimane di storico curate a mano. Nessuno dei case type esclusi deve
+    comparire nello storico — se compare, la lista e il file si contraddicono."""
+    from fasterreports.omni.settings import load_settings
+
+    root = Path(__file__).resolve().parents[1]
+    s = load_settings(root / "config" / "settings.yml", root=root)
+    assert s.casetype_esclusi, "settings.yml non dichiara casetype_esclusi"
+
+    storico = carica(root / "data" / "aht_history.csv")
+    if not storico:
+        pytest.skip("storico non presente")
+    presenti = {r.case_type.casefold() for r in storico}
+    intrusi = sorted(t for t in s.casetype_esclusi if t.casefold() in presenti)
+    assert not intrusi, (
+        f"questi case type sono dichiarati esclusi ma stanno nello storico: "
+        f"{intrusi}. Togli la riga da settings.yml, oppure togli le righe dal CSV."
+    )

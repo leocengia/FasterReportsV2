@@ -197,6 +197,25 @@ Rigenerare due volte la stessa settimana è sicuro: le righe di quella settimana
 vengono **sostituite**, non aggiunte. Se correggi un export e rilanci, lo storico
 resta giusto.
 
+**Se lo storico si perde, o vuoi rifare una settimana passata**, non serve
+rigenerare gli Omni Report: l'export Salesforce di quella settimana è ancora
+dentro il workbook che ha prodotto, nel foglio `SF_DATABASE`.
+
+```bash
+python tools\ricostruisci_storico.py output\Omni_Report_W3*.xlsm
+```
+
+Accetta indifferentemente `.xlsm` (legge il foglio `SF_DATABASE`) o un `.csv`
+(l'export SF grezzo), ricava la settimana da `Date Viewpoint`, e con `--dry-run`
+mostra cosa cambierebbe senza scrivere. Rispetta le esclusioni di
+`settings.yml`.
+
+Una limitazione da conoscere: i workbook generati **prima del 18/08/2026** hanno
+la colonna `Date Viewpoint` vuota (non era ancora nel contratto), e alcuni anche
+`Case Type`. Per quelli serve `--week AAAASS` (es. `--week 202631`), e se anche
+`Case Type` è vuoto lo strumento trova zero combinazioni: in quel caso occorre
+l'export SF grezzo di quella settimana.
+
 ### (Opzionale) Farlo girare da solo, senza doppio clic
 
 `--week auto` (e `run_report.bat auto`) calcolano da soli il numero della
@@ -383,10 +402,17 @@ Nell'export ci sono combinazioni (canale, tipo di caso) che il foglio
 `Helper CaseType` non elencava. Vengono **aggiunte automaticamente** in fondo a
 quel foglio, quindi i loro numeri esistono e sono corretti.
 
-Non compaiono però in `CaseType Deepdive`, che mostra una lista scelta a mano: se
-uno di quei tipi ti interessa, va aggiunto lì. Nella W33 erano cinque, e una
-(`Call Assignment`, 30 casi) superava anche la soglia di volume — un risultato
-vero che prima non compariva da nessuna parte.
+L'elenco li divide in due, e solo il primo gruppo richiede una decisione:
+
+- **`-> ENTRA nel trend`**: da questa settimana compaiono nelle heat map di
+  `AHT Trend WoW`, dove prima non c'erano. Il grafico cambia forma. Se non
+  devono starci, aggiungili a `aht_history.casetype_esclusi` in
+  `config\settings.yml` e rilancia — lo storico si riscrive, non si somma.
+- **`(escluso dal trend)`**: sono già nella lista delle esclusioni. Nessuna
+  azione: restano nei dati grezzi e nell'helper, fuori dalle heat map.
+
+In nessuno dei due casi compaiono in `CaseType Deepdive`, che mostra una lista
+scelta a mano: se uno ti interessa, va aggiunto lì.
 
 ### `date ambigue in <fonte>!<colonna>`
 Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un
@@ -631,6 +657,7 @@ Tutto quello che sta in `config\`. Sono file di testo: aprili con Notepad.
 | `sources.roster_sheet` | quale foglio leggere nel file dei turni (`publish`) |
 | `sources.backoffice_sheet` | quale foglio nel back office (`Only Cases Shifts`) |
 | `paths.aht_history` | dove sta lo storico del trend (`data/aht_history.csv`) |
+| `aht_history.casetype_esclusi` | i tipi di caso che **non** entrano nelle heat map (restano nei dati grezzi e nell'helper) |
 | `output.workbook_name` | come si chiama il file prodotto |
 | `validation.max_uncoercible_ratio` | quanti valori illeggibili tollerare per colonna (0.02 = 2%) |
 | `excel.visible` | mostrare sempre Excel |

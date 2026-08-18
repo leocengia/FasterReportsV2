@@ -88,7 +88,7 @@ def mappa_canale(raw) -> str:
     return CANALE_LIVE if str(raw).strip().lower() == "phone" else CANALE_NON_LIVE
 
 
-def aggrega(righe, *, iso_year: int, week: int) -> list[RigaStorico]:
+def aggrega(righe, *, iso_year: int, week: int, esclusi=()) -> list[RigaStorico]:
     """Da (canale, case type, AHT) riga per riga agli aggregati settimanali.
 
     `righe` e' un iterabile di terne cosi' come stanno nell'export: il canale
@@ -106,7 +106,18 @@ def aggrega(righe, *, iso_year: int, week: int) -> list[RigaStorico]:
 
     Le combinazioni a volume zero non esistono per costruzione: si aggregano le
     righe che ci sono, non il prodotto cartesiano di canali per case type.
+
+    `esclusi` sono i case type che non devono entrare nel trend. Non e' un filtro
+    di rumore: sono tipi di caso che non rappresentano lavoro confrontabile — le
+    telefonate non andate in porto (`Call Assignment`), le funzioni speciali —
+    e mescolarli agli altri sposterebbe le medie senza dire niente di utile. Il
+    volume non c'entra: nel W30 `Call Assignment` aveva 76 casi, piu' di meta'
+    delle combinazioni incluse, ed era comunque escluso.
+
+    Restano nei dati grezzi di `SF_DATABASE` e in 'Helper CaseType': escluderli
+    dal trend non vuol dire buttarli.
     """
+    fuori = {str(t).strip().casefold() for t in esclusi}
     volumi: dict[tuple[str, str], int] = {}
     somme: dict[tuple[str, str], float] = {}
     conteggi: dict[tuple[str, str], int] = {}
@@ -117,6 +128,8 @@ def aggrega(righe, *, iso_year: int, week: int) -> list[RigaStorico]:
             # Un caso senza tipo non appartiene a nessun case type: contarlo
             # sotto l'etichetta vuota creerebbe una riga fantasma nello storico
             # e nel foglio.
+            continue
+        if ct.casefold() in fuori:
             continue
         k = (mappa_canale(canale_raw), ct)
         volumi[k] = volumi.get(k, 0) + 1

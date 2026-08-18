@@ -52,6 +52,12 @@ Il programma:
    macro che genera `Dettaglio Malpractice`;
 4. salva in `output\Omni_Report_W<NN>.xlsm`.
 
+Oltre ai sei fogli scrive anche il **trend settimana-su-settimana**: aggiorna
+`data\aht_history.csv` — la memoria di volume e AHT per tipo di caso — e ne
+riversa una copia nel foglio `AHT History`, da cui `AHT Trend WoW` e
+`CaseType Deepdive` si ricalcolano da soli. Vedi il Passo 5 del capitolo 3:
+quel file va salvato nel repository dopo ogni giro.
+
 Le due cose che rendono il programma più affidabile del copia-incolla:
 
 - **Le colonne si cercano per nome, non per posizione.** Se un export sposta una
@@ -166,6 +172,49 @@ sempre su una copia.
 ### Passo 4 — Controlla il risultato
 
 Vedi capitolo 7. Sono tre controlli, due minuti.
+
+### Passo 5 — Salva lo storico del trend
+
+Il build aggiorna anche `data\aht_history.csv`: una riga per (settimana, canale,
+tipo di caso) con volume e AHT medio. È la memoria del trend settimana-su-settimana
+— alimenta il foglio `AHT History` e quindi le heat map di `AHT Trend WoW`.
+
+**Va salvato nel repository dopo ogni giro:**
+
+```bash
+git add data/aht_history.csv
+git commit -m "Storico AHT: settimana 33"
+git push
+```
+
+Perché è l'unico file del progetto che non si ricostruisce rilanciando il
+programma: gli export Salesforce delle settimane passate non li abbiamo più. Se
+va perso, il trend riparte da zero e le settimane precedenti sono da rifare a
+mano. È anche il motivo per cui **non** sta in `output\`, che è una cartella
+usa-e-getta esclusa da git.
+
+Rigenerare due volte la stessa settimana è sicuro: le righe di quella settimana
+vengono **sostituite**, non aggiunte. Se correggi un export e rilanci, lo storico
+resta giusto.
+
+**Se lo storico si perde, o vuoi rifare una settimana passata**, non serve
+rigenerare gli Omni Report: l'export Salesforce di quella settimana è ancora
+dentro il workbook che ha prodotto, nel foglio `SF_DATABASE`.
+
+```bash
+python tools\ricostruisci_storico.py output\Omni_Report_W3*.xlsm
+```
+
+Accetta indifferentemente `.xlsm` (legge il foglio `SF_DATABASE`) o un `.csv`
+(l'export SF grezzo), ricava la settimana da `Date Viewpoint`, e con `--dry-run`
+mostra cosa cambierebbe senza scrivere. Rispetta le esclusioni di
+`settings.yml`.
+
+Una limitazione da conoscere: i workbook generati **prima del 18/08/2026** hanno
+la colonna `Date Viewpoint` vuota (non era ancora nel contratto), e alcuni anche
+`Case Type`. Per quelli serve `--week AAAASS` (es. `--week 202631`), e se anche
+`Case Type` è vuoto lo strumento trova zero combinazioni: in quel caso occorre
+l'export SF grezzo di quella settimana.
 
 ### (Opzionale) Farlo girare da solo, senza doppio clic
 
@@ -348,6 +397,38 @@ settimana: devono essere tutte.
 Un giorno presente in una fonte e non nell'altra. Con un export parziale è il
 primo sintomo.
 
+### `case type nuovi`
+Nell'export ci sono combinazioni (canale, tipo di caso) che il foglio
+`Helper CaseType` non elencava. Vengono **aggiunte automaticamente** in fondo a
+quel foglio, quindi i loro numeri esistono e sono corretti.
+
+L'elenco li divide in due, e solo il primo gruppo richiede una decisione:
+
+- **`-> ENTRA nel trend`**: da questa settimana compaiono nelle heat map di
+  `AHT Trend WoW`, dove prima non c'erano. Il grafico cambia forma. Se non
+  devono starci, aggiungili a `aht_history.casetype_esclusi` in
+  `config\settings.yml` e rilancia — lo storico si riscrive, non si somma.
+- **`(escluso dal trend)`**: sono già nella lista delle esclusioni. Nessuna
+  azione: restano nei dati grezzi e nell'helper, fuori dalle heat map.
+
+In nessuno dei due casi compaiono in `CaseType Deepdive`, che mostra una lista
+scelta a mano: se uno ti interessa, va aggiunto lì.
+
+### `date ambigue in <fonte>!<colonna>`
+Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un
+export americano e l'8 ottobre per uno europeo. Il valore c'è e sembra buono, e
+il programma ne sceglie uno — quindi è il tipo di errore che non lascia traccia.
+
+Si risolve dichiarando il formato nel contratto, accanto al campo in
+`config/columns.yml`:
+
+```yaml
+date_format: "%m/%d/%Y %I:%M:%S %p"
+```
+
+Con il formato dichiarato la segnalazione non compare più, perché non c'è più
+niente da indovinare. `Date Viewpoint` di `SF_DATABASE` lo dichiara già.
+
 ---
 
 ## 6. I blocchi, uno per uno
@@ -409,6 +490,27 @@ Il parser conosce tutte le forme viste nei file reali (`0900_1331_1431_1800`,
 `Off`, turni senza pausa, il suffisso ` O`). Se ne arriva una nuova **blocca
 dicendo valore, cella e agente**, invece di indovinare: un turno interpretato
 male diventa ore previste sbagliate.
+
+### `Date Viewpoint non cade di lunedì`
+`SF_DATABASE` porta in colonna A il lunedì della settimana che l'export copre
+(Tableau scarica a granularità settimanale, quindi tutte le righe hanno lo stesso
+valore). Se quel giorno non è un lunedì, quasi sempre significa che **la data è
+stata letta al contrario** — `10/08` interpretato come 8 ottobre, che è un
+giovedì.
+
+Blocca perché tutto lo storico del trend finirebbe sotto la settimana sbagliata,
+e lo storico è l'unica cosa del programma che non si ricostruisce rilanciandolo.
+Controlla `date_format` del campo `Date Viewpoint` in `config\columns.yml` contro
+come sono scritte le date nell'export di questa settimana.
+
+### `l'export SF è di un'altra settimana`
+Il lunedì dichiarato da `SF_DATABASE` non è la settimana del resto del report.
+Qualcuno ha scaricato l'export Salesforce di una settimana diversa dagli altri:
+il report uscirebbe con dentro due settimane e nessuna etichetta a dirlo — cioè
+esattamente il file che viene archiviato e poi riletto come buono.
+
+Riscarica l'export della settimana giusta, oppure genera il report della
+settimana che l'export copre.
 
 ---
 
@@ -554,6 +656,8 @@ Tutto quello che sta in `config\`. Sono file di testo: aprili con Notepad.
 | `sources.include_marked_skills` | le skill con l'asterisco entrano? Vedi capitolo 6 |
 | `sources.roster_sheet` | quale foglio leggere nel file dei turni (`publish`) |
 | `sources.backoffice_sheet` | quale foglio nel back office (`Only Cases Shifts`) |
+| `paths.aht_history` | dove sta lo storico del trend (`data/aht_history.csv`) |
+| `aht_history.casetype_esclusi` | i tipi di caso che **non** entrano nelle heat map (restano nei dati grezzi e nell'helper) |
 | `output.workbook_name` | come si chiama il file prodotto |
 | `validation.max_uncoercible_ratio` | quanti valori illeggibili tollerare per colonna (0.02 = 2%) |
 | `excel.visible` | mostrare sempre Excel |

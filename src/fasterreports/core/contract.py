@@ -47,6 +47,10 @@ class Field:
     role: Role
     dtype: str = "str"
     match: MatchMode = "exact_first"
+    # Formato `strptime` con cui leggere la data, per i campi in cui indovinare
+    # sarebbe un lancio di moneta (`8/10/2026`: 10 agosto o 8 ottobre?). Vuoto =
+    # si prova la lista di formati noti, che va bene per le date non ambigue.
+    date_format: str = ""
     aliases: tuple[str, ...] = ()
     consumers: tuple[str, ...] = ()
     source: str | None = None  # per role=derived: da quale campo input discende
@@ -256,6 +260,19 @@ def _parse_field(dataset: str, fraw: dict) -> Field:
             f"(ammessi: {', '.join(sorted(_VALID_MATCH))})."
         )
 
+    date_format = str(fraw.get("date_format") or "")
+    if date_format and dtype != "datetime":
+        raise ContractError(
+            f"Dataset {dataset}, campo {fraw['canonical']!r}: date_format vale solo "
+            f"per dtype=datetime, qui il dtype e' {dtype!r}."
+        )
+    if date_format and "%" not in date_format:
+        raise ContractError(
+            f"Dataset {dataset}, campo {fraw['canonical']!r}: date_format="
+            f"{date_format!r} non contiene direttive strptime.\n"
+            f"  Esempio per un export americano: \"%m/%d/%Y %I:%M:%S %p\"."
+        )
+
     col_to_index(fraw["target_col"])  # valida subito la lettera
 
     return Field(
@@ -264,6 +281,7 @@ def _parse_field(dataset: str, fraw: dict) -> Field:
         role=role,
         dtype=dtype,
         match=match,
+        date_format=date_format,
         aliases=tuple(str(a) for a in (fraw.get("aliases") or [])),
         consumers=tuple(str(c) for c in (fraw.get("consumers") or [])),
         source=(str(fraw["source"]) if fraw.get("source") else None),

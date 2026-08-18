@@ -166,6 +166,26 @@ Se ti serve un valore che nell'export ha un nome instabile, usa `aliases`; se
 esiste un'altra colonna che normalizzando collassa sullo stesso nome, usa
 `match: exact` — meglio fallire che agganciare la colonna sbagliata.
 
+**Se la colonna è una data, guarda come è scritta prima di lasciarla al
+`dtype: datetime` e basta.** `8/10/2026` è il 10 agosto per un export americano e
+l'8 ottobre per uno europeo, e la lista dei formati noti prova quello europeo per
+primo: la scelta è un lancio di moneta che non lascia traccia. Dove la lettura
+conta, dichiarala:
+
+```yaml
+- canonical: Date Viewpoint
+  target_col: A
+  role: input
+  dtype: datetime
+  date_format: "%m/%d/%Y %I:%M:%S %p"
+```
+
+Con `date_format` si usa **solo** quel formato: se l'export cambia forma l'errore
+esce subito, che è il punto. Dove non è dichiarato e i valori sono ambigui, il
+preflight SEGNALA — non blocca, perché la lettura potrebbe anche essere quella
+giusta; quello che non va è non saperlo. Questo è stato un bug vero: `Date
+Viewpoint` della W33 veniva letta come settimana ISO 41.
+
 ### Aggiungere un foglio nuovo che legge i dati esistenti
 
 Questo è il caso **più facile e più sicuro**, e quasi sempre è quello che serve.
@@ -182,6 +202,42 @@ deve saperlo: scrive i dati, il workbook calcola.
 **Attenzione a una cosa sola:** se il foglio nuovo usa formule ad array
 dinamico, verifica che ci sia spazio sotto — le celle occupate producono
 `#SPILL!`.
+
+### Aggiungere un foglio che ha bisogno di ricordare le settimane passate
+
+Il caso in cui le formule non bastano: un trend settimana-su-settimana ha bisogno
+di dati che nell'export non ci sono più. Il workbook viene sovrascritto ogni
+settimana, quindi non può essere lui la memoria.
+
+Il precedente da copiare è `AHT History` (fatto il 2026-08-18):
+
+1. **La memoria vive fuori dal workbook**, in un CSV versionato — non in
+   `output\`, che è usa-e-getta ed esclusa da git. `paths.aht_history` in
+   `settings.yml`.
+2. **Il calcolo va in un modulo `core\` puro**: niente xlwings, niente Excel,
+   solo liste e file di testo (`core\aht_history.py`). È la parte in cui si
+   annidano gli errori di conteggio, e va poter essere verificata per intero con
+   i test — cosa impossibile per il codice che parla con Excel.
+3. **L'aggiornamento è idempotente.** Rigenerare la stessa settimana due volte
+   capita ogni volta che si corregge un export: le righe di quella settimana si
+   **sostituiscono**, non si aggiungono. Chiave: `(settimana, canale, tipo)`,
+   vince l'ultimo giro.
+4. **La scrittura nel foglio sta in `writer.py`** e si aggancia in
+   `_scrivi_derivati`, chiamato dentro `_scrivi_workbook` — dopo `write_block`
+   (perché il resize della tabella deve essere già avvenuto) e prima del
+   ricalcolo (perché i fogli a formule devono vedere i dati nuovi).
+5. **Non è un `Dataset` del contratto.** Un dataset, qui, è una sorgente che si
+   importa e si valida; questo è un risultato calcolato, e il contratto non ha
+   niente da controllare su di lui.
+6. **Se manca la settimana, non si scrive niente.** Archiviare gli aggregati
+   sotto la settimana sbagliata corromperebbe la memoria in modo permanente:
+   meglio un buco dichiarato che un numero plausibile e falso.
+
+Una trappola che vale la pena conoscere: se la settimana finisce in una colonna
+numerica, va portato anche l'**anno**. Le settimane ISO ripartono da 1 ogni
+gennaio, quindi un `SORT` o un `SUMIFS` sulla sola settimana, a cavallo d'anno,
+mette la W1 sotto la W52 e fa collidere due W05 di anni diversi — in silenzio.
+Da qui la colonna `week_key` (`anno * 100 + settimana`).
 
 ### Aggiungere una fonte dati nuova
 

@@ -192,15 +192,22 @@ def test_il_template_reale_ha_i_limiti_che_conosciamo():
     assert "ATwi_DATASET" not in vinc
     assert "Slot Only Cases" not in vinc
 
-    # Gli altri hanno margini ampi, tranne SF_DATABASE — che e' il motivo per cui
-    # esiste tools/fix_profilo_colonne_sf.py. Quando quel fix sara' applicato al
-    # template, SF_DATABASE salira' a 50000 (Anagrafica) e questa riga va aggiornata.
     assert vinc["AT_DATASET"] == 130000
     assert vinc["Turni"] == 10000
     assert vinc["PSAT_DATASET"] == 1000
-    assert vinc["SF_DATABASE"] in (3389, 50000), (
-        f"SF_DATABASE limitato a {vinc['SF_DATABASE']}: se hai cambiato le formule "
-        f"di 'Profilo Colonne SF', aggiorna questo test."
+
+    # SF_DATABASE e' stato per mesi il limite piu' stretto del template: 3389,
+    # imposto dalle formule a riga fissa di 'Profilo Colonne SF' (un foglio
+    # diagnostico che nessuno leggeva). Con la sua cancellazione, il 2026-08-18,
+    # il vincolo che resta e' quello largo di 'Anagrafica'.
+    #
+    # Questo test lo fissa a 50000 invece di accettare entrambi i valori: tornare
+    # a 3389 vorrebbe dire che il foglio e' rientrato nel template, e sarebbe una
+    # cosa da sapere, non da tollerare in silenzio.
+    assert vinc["SF_DATABASE"] == 50000, (
+        f"SF_DATABASE limitato a {vinc['SF_DATABASE']} invece di 50000: qualche "
+        f"formula ha di nuovo una riga finale scritta a mano. Trovala con:\n"
+        f"  python tools/audit_workbook.py template/Omni_Report_TEMPLATE.xlsm --usage"
     )
 
 

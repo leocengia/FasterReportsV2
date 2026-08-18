@@ -93,6 +93,10 @@ def check_sources(
     aliases: dict[str, str] | None = None,
     row_limits: list | None = None,
     last_rows: dict[str, int] | None = None,
+    column_stats: dict[str, dict] | None = None,
+    date_viewpoint: list | None = None,
+    casetype_nuovi: list[tuple[str, str]] | None = None,
+    casetype_esclusi: tuple[str, ...] = (),
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -133,6 +137,13 @@ def check_sources(
 
     if row_limits is not None and last_rows:
         _check_row_limits(rep, row_limits, last_rows)
+
+    if column_stats:
+        _check_date_ambigue(rep, column_stats)
+    if date_viewpoint:
+        _check_date_viewpoint(rep, date_viewpoint, week_inferred)
+    if casetype_nuovi:
+        _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -276,6 +287,166 @@ def _check_requests(rep, notes) -> None:
                 "Se una REQUEST accettata deve valere come slot, va chiarito."
             ),
         ))
+
+
+# --- date che si leggono in due modi --------------------------------------
+
+def _check_date_ambigue(rep, column_stats: dict[str, dict]) -> None:
+    """Una colonna data che si legge in due modi, senza che nessuno dica quale.
+
+    `8/10/2026` e' il 10 agosto per un export americano e l'8 ottobre per uno
+    europeo. Il valore c'e', sembra buono, e la pipeline ne sceglie uno: e' il
+    modo peggiore di sbagliare, perche' non lascia traccia. Con `date_format`
+    nel contratto il dubbio non esiste e questo controllo non scatta.
+    """
+    for dataset, stats in sorted(column_stats.items()):
+        for st in stats.values():
+            if not getattr(st, "ambigue", 0):
+                continue
+            rep.add(Finding(
+                check=f"date ambigue in {dataset}!{st.target_col}",
+                level=SEGNALA,
+                summary=(
+                    f"{st.ambigue} valori di {st.canonical!r} si leggono sia "
+                    f"giorno/mese sia mese/giorno"
+                ),
+                details=[f"esempi: {', '.join(st.esempi_ambigui)}"],
+                hint=(
+                    "Nessuna delle due letture e' piu' giusta dell'altra guardando la\n"
+                    "stringa: al momento vince il primo formato che combacia, cioe' quello\n"
+                    "europeo. Se l'export e' americano le date sono sbagliate SENZA errore.\n"
+                    "Rimedio: dichiara il formato nel contratto, accanto al campo:\n"
+                    '    date_format: "%m/%d/%Y %I:%M:%S %p"'
+                ),
+            ))
+
+
+def _check_date_viewpoint(rep, valori: list, week_inferred) -> None:
+    """`Date Viewpoint` di SF_DATABASE: un solo lunedi', quello giusto.
+
+    Tableau esporta a granularita' settimanale, quindi la colonna vale lo stesso
+    giorno per tutte le righe, ed e' il lunedi' della settimana. Due cose vale
+    la pena controllare, perche' entrambe sarebbero silenziose:
+
+    - **Non e' lunedi'** -> quasi sempre significa che il formato della data e'
+      stato letto al contrario (10/08 letto come 8 ottobre, che e' un giovedi').
+      E' il modo in cui questo controllo intercetta un cambio di formato
+      dell'export.
+    - **Non e' la settimana del resto del report** -> qualcuno ha scaricato
+      l'export SF di una settimana diversa dagli altri. Il report uscirebbe con
+      dentro due settimane e nessuna etichetta a dirlo.
+    """
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
+    giorni: dict[_date, int] = {}
+    for v in valori:
+        if isinstance(v, _dt):
+            v = v.date()
+        if isinstance(v, _date):
+            giorni[v] = giorni.get(v, 0) + 1
+    if not giorni:
+        return
+
+    if len(giorni) > 1:
+        rep.add(Finding(
+            check="Date Viewpoint non e' un solo giorno",
+            level=SEGNALA,
+            summary=f"{len(giorni)} giorni distinti in SF_DATABASE!'Date Viewpoint'",
+            details=[f"{d.isoformat()}: {n} righe" for d, n in sorted(giorni.items())],
+            hint=(
+                "L'export Tableau a granularita' settimanale ne porta uno solo.\n"
+                "Piu' giorni = l'export copre piu' di una settimana: il volume e l'AHT\n"
+                "finirebbero nello storico sotto un'unica settimana, sommati."
+            ),
+        ))
+
+    prevalente = max(giorni.items(), key=lambda kv: kv[1])[0]
+    if prevalente.weekday() != 0:
+        nomi = ("lunedi", "martedi", "mercoledi", "giovedi", "venerdi", "sabato", "domenica")
+        rep.add(Finding(
+            check="Date Viewpoint non cade di lunedi",
+            level=BLOCCA,
+            summary=(
+                f"{prevalente.isoformat()} e' un {nomi[prevalente.weekday()]}, "
+                f"non un lunedi"
+            ),
+            hint=(
+                "La settimana Tableau comincia di lunedi': se qui non lo e', quasi\n"
+                "sempre la data e' stata letta al contrario (giorno/mese invece di\n"
+                "mese/giorno, o viceversa) e TUTTO lo storico finirebbe sotto la\n"
+                "settimana sbagliata.\n"
+                "Controlla `date_format` del campo 'Date Viewpoint' in config/columns.yml\n"
+                "contro come sono scritte le date nell'export di questa settimana."
+            ),
+        ))
+        return
+
+    if week_inferred:
+        iso = prevalente.isocalendar()
+        if (iso[0], iso[1]) != tuple(week_inferred):
+            rep.add(Finding(
+                check="l'export SF e' di un'altra settimana",
+                level=BLOCCA,
+                summary=(
+                    f"SF_DATABASE dice {iso[0]}-W{iso[1]:02d}, il resto del report "
+                    f"{week_inferred[0]}-W{week_inferred[1]:02d}"
+                ),
+                details=[f"Date Viewpoint = {prevalente.isoformat()} (lunedi)"],
+                hint=(
+                    "Un report con dentro due settimane diverse e nessuna etichetta che\n"
+                    "lo dica e' esattamente il genere di file che viene archiviato e poi\n"
+                    "riletto come buono.\n"
+                    "Riscarica l'export SF della settimana giusta, oppure genera il report\n"
+                    "della settimana che l'export copre."
+                ),
+            ))
+
+
+def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], esclusi=()) -> None:
+    """Case type nei dati che il template non conosceva.
+
+    Vengono appesi automaticamente a 'Helper CaseType', quindi non si perde
+    niente. Ma la conseguenza da segnalare e' un'altra, e riguarda il trend:
+    un case type nuovo che non e' nella lista delle esclusioni **entra nelle
+    heat map**, dove finora non c'era. Il grafico cambia forma, e chi lo guarda
+    la settimana dopo non ha modo di sapere perche'.
+
+    Quindi i nuovi si dividono in due, e i due gruppi vogliono azioni diverse:
+    quelli esclusi non richiedono niente, gli altri richiedono una decisione —
+    tenerli nel trend o aggiungerli a `aht_history.casetype_esclusi`.
+    """
+    fuori = {str(t).strip().casefold() for t in esclusi}
+    nel_trend = [(c, t) for c, t in nuovi if t.strip().casefold() not in fuori]
+    fuori_trend = [(c, t) for c, t in nuovi if t.strip().casefold() in fuori]
+
+    dettagli = [f"{c} | {t}   -> ENTRA nel trend" for c, t in nel_trend]
+    dettagli += [f"{c} | {t}   (escluso dal trend)" for c, t in fuori_trend]
+
+    hint = (
+        "Sono stati appesi in fondo a 'Helper CaseType', quindi i loro numeri\n"
+        "esistono e sono corretti. Non compaiono in 'CaseType Deepdive', che ha una\n"
+        "lista curata a mano: se uno di questi ti interessa, aggiungilo lì."
+    )
+    if nel_trend:
+        hint += (
+            "\nQuelli marcati ENTRA compaiono da questa settimana nelle heat map di\n"
+            "'AHT Trend WoW', dove prima non c'erano. Se non devono starci, aggiungili\n"
+            "a aht_history.casetype_esclusi in settings.yml e rilancia: lo storico si\n"
+            "riscrive, non si somma."
+        )
+
+    rep.add(Finding(
+        check="case type nuovi",
+        level=SEGNALA,
+        summary=(
+            f"{len(nuovi)} combinazioni (canale, case type) non erano in "
+            f"'Helper CaseType'"
+            + (f", di cui {len(nel_trend)} entrano nel trend" if nel_trend else "")
+        ),
+        details=dettagli,
+        hint=hint,
+    ))
 
 
 # --- la settimana e' quella giusta? ---------------------------------------

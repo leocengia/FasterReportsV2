@@ -25,6 +25,11 @@ class ColumnStats:
     blank: int = 0
     bad: int = 0
     examples: list[str] = field(default_factory=list)
+    # Date che si leggono in due modi (`8/10/2026`) senza che il contratto dica
+    # quale. Il valore c'e' e sembra buono, quindi non e' un `bad`: e' peggio,
+    # perche' non lo vedrebbe nessuno. Il preflight lo SEGNALA.
+    ambigue: int = 0
+    esempi_ambigui: list[str] = field(default_factory=list)
 
     @property
     def considered(self) -> int:
@@ -66,30 +71,40 @@ def build_block(
     end = dataset.last_input_index
     width = end - start + 1
 
-    # Per ogni colonna target: da quale indice del CSV prendere e con che dtype.
-    plan: list[tuple[int, int, str, str]] = []  # (offset_blocco, idx_sorgente, dtype, canonical)
+    # Per ogni colonna target: da quale indice del CSV prendere, con che dtype e
+    # con che formato di data (vuoto = si prova la lista dei formati noti).
+    plan: list[tuple[int, int, str, str, str]] = []
     by_canonical = mapping.by_canonical()
     for fld in dataset.input_fields:
         res = by_canonical[fld.canonical]
-        plan.append((fld.target_index - start, res.source_index, fld.dtype, fld.canonical))
+        plan.append(
+            (fld.target_index - start, res.source_index, fld.dtype, fld.canonical,
+             fld.date_format)
+        )
 
     stats = {
         canonical: ColumnStats(canonical=canonical, target_col=index_to_col(start + off))
-        for off, _, _, canonical in plan
+        for off, _, _, canonical, _ in plan
     }
 
     out: list[list] = []
     for row in rows:
         line: list = [None] * width
-        for off, src_idx, dtype, canonical in plan:
+        for off, src_idx, dtype, canonical, fmt in plan:
             st = stats[canonical]
             st.total += 1
             raw = row[src_idx] if src_idx < len(row) else None
             if C.is_blank(raw):
                 st.blank += 1
                 continue
+            # Solo se il contratto NON dichiara il formato: con `date_format` la
+            # lettura e' decisa, non c'e' ambiguita' da segnalare.
+            if dtype == "datetime" and not fmt and C.data_ambigua(raw):
+                st.ambigue += 1
+                if len(st.esempi_ambigui) < 4:
+                    st.esempi_ambigui.append(str(raw)[:40])
             try:
-                line[off] = C.coerce(raw, dtype)
+                line[off] = C.coerce(raw, dtype, fmt)
             except C.Uncoercible:
                 st.bad += 1
                 if len(st.examples) < 8:

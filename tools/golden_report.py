@@ -56,8 +56,6 @@ ATTESE = """Differenze attese, dichiarate in anticipo:
     processo manuale sulle righe non lavorate, e 'NO BOT' scritto per esteso.
     Nessuna formula le legge (filtrano su Stato="LAVORA"), quindi non
     propagano — ma per questo i fogli di input non si confrontano affatto.
-  · 'Profilo Colonne SF': ha i limiti di riga scritti a mano nelle formule
-    ($EM$3389) e resta indietro quando il numero di righe cambia.
   · 'Recap PSAT Positive': l'"Elogio della settimana" punta alla riga FISSA
     130 di PSAT_DATASET, cioe' e' una scelta manuale. Se il numero di righe
     PSAT cambia, quella cella pesca un commento diverso."""
@@ -179,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         fogli = [f for f in FOGLI_OUTPUT if f in presenti]
         # Fogli di output che non avevo previsto: meglio confrontarli che ignorarli.
         extra = sorted(presenti - set(FOGLI_OUTPUT) - FOGLI_INPUT)
-        fogli += [f for f in extra if f != "Profilo Colonne SF"]
+        fogli += extra
 
     print(f"generato:     {args.generato}")
     print(f"riferimento:  {args.riferimento}")

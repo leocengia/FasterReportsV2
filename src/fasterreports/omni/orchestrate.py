@@ -14,6 +14,12 @@ Ordine, e perche':
      copia TEMPORANEA, mai out_path direttamente (`_scrivi_con_copia_atomica`):
      se un run va male a meta', out_path resta quello di prima.
   3. scrittura dei dataset nella copia temporanea.
+  3b. i due fogli DERIVATI ('AHT History', le righe nuove di 'Helper CaseType'):
+     non vengono da un file di input, si calcolano dai dati di SF_DATABASE
+     appena scritti. Vanno qui, dopo il punto 3 — perche' il resize di
+     `AHT_Data` deve essere gia' avvenuto — e prima del punto 4, perche'
+     'AHT Trend WoW' e 'CaseType Deepdive' sono tutte formule e devono
+     ricalcolare su questi valori, non su quelli della settimana precedente.
   4. ricalcolo completo. Le formule usano XLOOKUP/FILTER/UNIQUE in array e
      INDIRECT: volatili, un calculate() semplice non propaga sempre.
   5. macro malpractice, in modalita' silenziosa.
@@ -280,6 +286,40 @@ def run_preflight(
     return report, blocks
 
 
+def _colonna(dataset, block, canonical: str) -> list:
+    """I valori di una colonna del blocco, per nome canonico.
+
+    Serve ai passaggi che lavorano sui dati gia' letti (lo storico AHT, i case
+    type) e che non devono sapere in che colonna del foglio quel campo finisce.
+    """
+    from ..core.contract import col_to_index
+
+    fld = next((f for f in dataset.input_fields if f.canonical == canonical), None)
+    if fld is None:
+        return []
+    off = fld.target_index - col_to_index(dataset.data_start_col)
+    return [row[off] if off < len(row) else None for row in block.rows]
+
+
+def _terne_sf(contract: Contract, blocks: dict) -> list[tuple]:
+    """(canale, case type, AHT) riga per riga da SF_DATABASE.
+
+    E' l'unico ingrediente dello storico settimanale: si prende dal blocco gia'
+    validato dal preflight, non rileggendo il CSV. Cosi' lo storico e il foglio
+    `SF_DATABASE` del report non possono raccontare due cose diverse.
+    """
+    block = blocks.get("SF_DATABASE")
+    if not block or not block.rows:
+        return []
+    ds = contract.dataset("SF_DATABASE")
+    canali = _colonna(ds, block, "Case Origin (group)")
+    tipi = _colonna(ds, block, "Case Type")
+    aht = _colonna(ds, block, "Case AHT (mins)")
+    if not (canali and tipi):
+        return []
+    return list(zip(canali, tipi, aht or [None] * len(canali)))
+
+
 def _at_start_times(dataset, block) -> list:
     """I valori di `AT_DATASET!Start Time`, per ricavare anno e copertura."""
     from ..core.contract import col_to_index
@@ -330,7 +370,16 @@ def _run_coherence(contract, settings, report, blocks, ctx):
     if settings.template.is_file():
         email = _read_email_agenti(settings.template)
 
+    sf = blocks.get("SF_DATABASE")
+    date_viewpoint = (
+        _colonna(contract.dataset("SF_DATABASE"), sf, "Date Viewpoint") if sf else None
+    )
+
     return check_sources(
+        column_stats={n: b.stats for n, b in blocks.items() if b.stats},
+        date_viewpoint=date_viewpoint,
+        casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
+        casetype_esclusi=settings.casetype_esclusi,
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
         turni_rows=turni.rows if turni else None,
@@ -351,6 +400,50 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         row_limits=_row_limits(contract, settings),
         last_rows=_last_rows(contract, blocks),
     )
+
+
+def _casetype_nuovi(contract: Contract, settings: Settings, blocks: dict):
+    """I case type nei dati che 'Helper CaseType' del template non elenca.
+
+    Si legge il template OFFLINE, senza Excel: cosi' l'avviso arriva col
+    preflight — prima del build — invece che dopo. Chi guarda il rapporto sa
+    subito che nel deepdive mancheranno quei tipi, e puo' decidere se
+    aggiungerli alla lista curata prima di generare.
+    """
+    if not settings.template.is_file():
+        return None
+    terne = _terne_sf(contract, blocks)
+    if not terne:
+        return None
+    from ..core.casetype import coppie_dai_dati, da_appendere
+
+    esistenti = _read_casetype_helper(settings.template)
+    if esistenti is None:
+        return None
+    return da_appendere(esistenti, coppie_dai_dati((c, t) for c, t, _ in terne)) or None
+
+
+def _read_casetype_helper(template) -> list[tuple[str, str]] | None:
+    """Le coppie (canale, case type) elencate in 'Helper CaseType'!A:B.
+
+    `None` (e non lista vuota) se il foglio non c'e': significa "non so", ed e'
+    diverso da "la lista e' vuota". Con un template senza quel foglio il
+    controllo si salta, non segnala 53 case type mancanti.
+    """
+    try:
+        from ..core.xlsxsource import read_sheet
+
+        sheet = read_sheet(template, "Helper CaseType")
+    except PipelineError:
+        return None
+    out: list[tuple[str, str]] = []
+    for rownum in sheet.rows:
+        if rownum == 1:
+            continue
+        canale, ct = sheet.cell("A", rownum), sheet.cell("B", rownum)
+        if canale and ct and str(canale).strip() and str(ct).strip():
+            out.append((str(canale).strip(), str(ct).strip()))
+    return out
 
 
 def _assert_vba_compilabile(template) -> None:
@@ -579,6 +672,97 @@ def _con_retry(fn, *, tentativi: int = 3, attesa_iniziale: float = 2.0):
             attesa *= 2
 
 
+def _settimana_storico(contract: Contract, blocks: dict, report: PreflightReport):
+    """(anno ISO, settimana) sotto cui archiviare gli aggregati di questa settimana.
+
+    Si preferisce `Date Viewpoint` dell'export SF: gli aggregati sono di QUEL
+    file, quindi la settimana giusta e' quella che il file dichiara. Il
+    controllo di coerenza garantisce che coincida con quella del resto del
+    report (e BLOCCA se non coincide), percio' preferire l'una o l'altra non
+    cambia il risultato — cambia solo cosa succede quando una delle due manca.
+
+    Se `Date Viewpoint` non c'e' (export vecchio, o colonna rinominata), si
+    ripiega sulla settimana ricavata da `AT_DATASET`.
+    """
+    sf = blocks.get("SF_DATABASE")
+    if sf and sf.rows:
+        from datetime import date as _date
+        from datetime import datetime as _dt
+
+        giorni: dict[_date, int] = {}
+        for v in _colonna(contract.dataset("SF_DATABASE"), sf, "Date Viewpoint"):
+            if isinstance(v, _dt):
+                v = v.date()
+            if isinstance(v, _date):
+                giorni[v] = giorni.get(v, 0) + 1
+        if giorni:
+            prevalente = max(giorni.items(), key=lambda kv: kv[1])[0]
+            iso = prevalente.isocalendar()
+            return (iso[0], iso[1])
+    return report.week
+
+
+def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict, settimana):
+    """Storico AHT e case type nuovi: le due scritture che non vengono da un file.
+
+    Se non si sa a che settimana appartengono i dati non si scrive niente e si
+    dice perche': mettere gli aggregati sotto la settimana sbagliata
+    corromperebbe lo storico in modo permanente, ed e' l'unica cosa del progetto
+    che non si ricostruisce rilanciando il programma.
+
+    Nota su cosa succede se il build fallisce DOPO questo punto (la macro va in
+    errore, per esempio): il CSV e' gia' aggiornato mentre il workbook non viene
+    promosso al nome buono. E' voluto e innocuo — gli aggregati sono di dati che
+    il preflight ha validato, quindi restano corretti, e `unisci` e' idempotente:
+    il giro successivo riscrive le stesse righe. Rimandare la scrittura a build
+    riuscito vorrebbe dire tenere aperto il file dello storico attraverso tutta
+    la sequenza Excel, per proteggersi da un caso che non produce danni.
+    """
+    from ..core.aht_history import aggrega, carica, righe_foglio, scrivi, unisci
+    from ..core.casetype import coppie_dai_dati, da_appendere
+    from .writer import (
+        FOGLIO_STORICO,
+        WriteResult,
+        append_helper_casetype,
+        leggi_coppie_helper,
+        write_aht_history,
+    )
+
+    terne = _terne_sf(contract, blocks)
+    if not terne:
+        return []
+    if not settimana:
+        return [WriteResult(
+            dataset=FOGLIO_STORICO,
+            rows_written=0,
+            rows_cleared=0,
+            range_written="(saltato)",
+            warnings=(
+                "Non so a quale settimana attribuire gli aggregati AHT: manca sia "
+                "'Date Viewpoint' in SF_DATABASE sia la settimana ricavata da "
+                "AT_DATASET. Lo storico NON e' stato toccato — e' meglio di "
+                "archiviarlo sotto la settimana sbagliata.",
+            ),
+        )]
+
+    iso_year, week = settimana
+    nuove = aggrega(
+        terne, iso_year=iso_year, week=week, esclusi=settings.casetype_esclusi
+    )
+    storico = unisci(carica(settings.aht_history), nuove)
+    scrivi(settings.aht_history, storico)
+
+    out = [write_aht_history(book, righe_foglio(storico))]
+    out.append(append_helper_casetype(
+        book,
+        da_appendere(
+            leggi_coppie_helper(book),
+            coppie_dai_dati((c, t) for c, t, _ in terne),
+        ),
+    ))
+    return out
+
+
 def build(
     contract: Contract,
     settings: Settings,
@@ -646,6 +830,7 @@ def build(
 
     writes: list[WriteResult] = []
     macro_ran = False
+    settimana_storico = _settimana_storico(contract, blocks, report)
 
     def _scrivi_workbook(temp_path: Path) -> None:
         nonlocal macro_ran
@@ -669,6 +854,14 @@ def build(
                 if settings.derived_mode == "python" and dataset.derived_fields:
                     block = add_derived(dataset, block, offset or 0.0)
                 writes.append(write_block(book, contract, dataset, block))
+
+            # I fogli derivati, DOPO che SF_DATABASE e' stato scritto (e la
+            # tabella AHT_Data ridimensionata dal suo write_block) e PRIMA del
+            # ricalcolo: 'AHT Trend WoW' e 'Helper CaseType' sono tutte formule,
+            # e devono ricalcolare su questi dati, non su quelli di prima.
+            writes.extend(
+                _scrivi_derivati(book, contract, settings, blocks, settimana_storico)
+            )
 
             if settings.excel.full_rebuild:
                 app.api.CalculateFullRebuild()

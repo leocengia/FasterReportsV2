@@ -30,6 +30,11 @@ loro `_clear_data` pulisce un intervallo contiguo (`A:I` e `A:E`) fino
 all'ultima riga usata del foglio — che serve, perché nel W30 `Turni` è
 dimensionato fino a riga 1141 mentre i dati sono 252: c'è molto spazio in cui
 possono annidarsi residui di settimane precedenti, e il VBA li leggerebbe.
+
+In fondo al file ci sono due scritture di natura diversa (`write_aht_history`,
+`append_helper_casetype`): non riversano un file di input in un foglio, ma un
+risultato calcolato dai dati di `SF_DATABASE` già letti. Vedi il commento che
+le introduce per il perché non sono `Dataset` del contratto.
 """
 
 from __future__ import annotations
@@ -156,6 +161,215 @@ def _resize_table(book, sht, dataset: Dataset, last_row: int, warnings: list[str
             f"'Profilo Colonne SF' — resteranno sul conteggio vecchio."
         )
         return None
+
+
+# ---------------------------------------------------------------------------
+# I due fogli derivati: non vengono da un file di input, si calcolano dai dati
+# di SF_DATABASE che sono gia' stati letti e validati.
+#
+# Per questo NON sono `Dataset` del contratto: un dataset, qui, e' una sorgente
+# che si importa e si valida. Questi due sono un risultato, e il contratto non
+# ha niente da controllare su di loro.
+# ---------------------------------------------------------------------------
+
+FOGLIO_STORICO = "AHT History"
+FOGLIO_HELPER_CASETYPE = "Helper CaseType"
+# Colonna di 'Helper CaseType' che porta una formula su ogni riga utilizzabile.
+# Serve per misurare fin dove il template ha preparato le formule: scrivere una
+# coppia (canale, case type) oltre quel punto la lascerebbe senza AHT, senza
+# volume e senza categoria — invisibile, che e' il difetto che questo passaggio
+# esiste per togliere.
+COL_FORMULA_HELPER = "D"
+
+
+def write_aht_history(book, righe_foglio: list[list], warnings: list[str] | None = None) -> WriteResult:
+    """Riscrive 'AHT History' da zero con lo storico completo.
+
+    Da zero e non in append: lo storico vero e' il CSV fuori dal workbook, e il
+    foglio ne e' solo una copia. Ricostruirlo ogni volta rende impossibile che
+    le due cose divergano — che e' il guasto tipico di un foglio che si aggiorna
+    a mano.
+
+    I formati numerici NON sono scritti qui: si leggono dalla riga 2 del
+    template e si propagano in basso. La colonna A tiene un numero (33) ma si
+    legge `W33` grazie al formato `"W"0`, e la colonna E ha due decimali. Se
+    quei formati fossero scritti in questo file diventerebbero una seconda
+    verita' accanto al template, che e' esattamente il genere di duplicazione
+    che questo progetto evita. Il rovescio della medaglia, dichiarato: se
+    qualcuno svuota completamente il foglio nel template, la riga 2 non ha piu'
+    un formato da copiare e i numeri appaiono grezzi.
+    """
+    warnings = warnings if warnings is not None else []
+    try:
+        sht = book.sheets[FOGLIO_STORICO]
+    except Exception:
+        raise PipelineError(
+            f"Il template non contiene il foglio {FOGLIO_STORICO!r}, che serve al "
+            f"trend settimanale.\n"
+            f"  Fogli presenti: {', '.join(s.name for s in book.sheets)}\n"
+            f"  Senza quel foglio 'AHT Trend WoW' non ha da dove leggere: va aggiunto "
+            f"al template (intestazioni {', '.join(righe_foglio[0])})."
+        ) from None
+
+    n_col = len(righe_foglio[0])
+    ultima_col = index_to_col(n_col)
+
+    # Pulizia fino all'ultima riga usata: uno storico piu' corto di prima (puo'
+    # capitare correggendo il CSV a mano) lascerebbe in fondo righe vecchie, e le
+    # formule del trend leggono fino a riga 100000 — le vedrebbero.
+    last_used = max(sht.used_range.last_cell.row, len(righe_foglio))
+    sht.range(f"A1:{ultima_col}{last_used}").clear_contents()
+
+    sht.range(f"A1:{ultima_col}{len(righe_foglio)}").value = righe_foglio
+    ultima_riga = len(righe_foglio)
+
+    _propaga_formati(sht, ultima_col, ultima_riga, warnings)
+
+    return WriteResult(
+        dataset=FOGLIO_STORICO,
+        rows_written=ultima_riga - 1,  # senza l'intestazione
+        rows_cleared=max(0, last_used - 1),
+        range_written=f"A2:{ultima_col}{ultima_riga}",
+        warnings=tuple(warnings),
+    )
+
+
+def _propaga_formati(sht, ultima_col: str, ultima_riga: int, warnings: list[str]) -> None:
+    """Estende alle righe nuove i formati numerici della riga 2 del template."""
+    if ultima_riga <= 2:
+        return
+    for idx in range(1, col_to_index(ultima_col) + 1):
+        col = index_to_col(idx)
+        try:
+            fmt = sht.range(f"{col}2").number_format
+            if fmt:
+                sht.range(f"{col}3:{col}{ultima_riga}").number_format = fmt
+        except Exception as exc:  # pragma: no cover — serve Excel
+            warnings.append(
+                f"{FOGLIO_STORICO}: non ho potuto propagare il formato della colonna "
+                f"{col} alle righe nuove ({exc}). I numeri sono corretti, la loro "
+                f"resa a schermo puo' essere grezza (es. 33 invece di W33)."
+            )
+            return
+
+
+def append_helper_casetype(book, nuove: list[tuple[str, str]]) -> WriteResult:
+    """Aggiunge in fondo a 'Helper CaseType' le coppie (canale, case type) nuove.
+
+    Scrive SOLO le colonne A e B, e SOLO sotto le righe gia' occupate: tutto il
+    resto del foglio sono formule del template, e 'CaseType Deepdive' punta alle
+    righe per posizione. Muovere una riga esistente vorrebbe dire spostare i
+    case type sotto le etichette sbagliate nel deepdive, che l'utente ha
+    formattato a mano.
+
+    Si ferma dove finiscono le formule del template. Una coppia scritta oltre
+    quel punto avrebbe nome e canale ma nessun numero accanto: sarebbe presente
+    e invisibile insieme — cioe' lo stesso difetto che questo passaggio serve a
+    eliminare. Meglio dirlo e non scriverla.
+    """
+    warnings: list[str] = []
+    try:
+        sht = book.sheets[FOGLIO_HELPER_CASETYPE]
+    except Exception:
+        # Non e' fatale: e' un foglio di supporto a un report secondario, e il
+        # resto dell'Omni Report e' valido. Ma va detto.
+        return WriteResult(
+            dataset=FOGLIO_HELPER_CASETYPE,
+            rows_written=0,
+            rows_cleared=0,
+            range_written="(foglio assente)",
+            warnings=(
+                f"Il template non contiene il foglio {FOGLIO_HELPER_CASETYPE!r}: "
+                f"'CaseType Deepdive' non verra' aggiornato con i case type nuovi.",
+            ),
+        )
+
+    if not nuove:
+        return WriteResult(
+            dataset=FOGLIO_HELPER_CASETYPE,
+            rows_written=0,
+            rows_cleared=0,
+            range_written="(nessun case type nuovo)",
+        )
+
+    capienza = _capienza_helper(sht)
+    prima_libera = _prima_riga_libera(sht)
+
+    spazio = capienza - prima_libera + 1
+    da_scrivere = nuove[:spazio] if spazio > 0 else []
+    if len(da_scrivere) < len(nuove):
+        escluse = nuove[len(da_scrivere):]
+        warnings.append(
+            f"{FOGLIO_HELPER_CASETYPE}: le formule del template arrivano a riga "
+            f"{capienza} e lo spazio libero e' finito. {len(escluse)} case type NON "
+            f"sono stati aggiunti: "
+            + ", ".join(f"{c}|{t}" for c, t in escluse[:6])
+            + (f" (+{len(escluse) - 6})" if len(escluse) > 6 else "")
+            + f". Rimedio: trascina le formule di {FOGLIO_HELPER_CASETYPE} piu' in "
+            f"basso (colonne C..AG) e riallarga i loro intervalli di ranking."
+        )
+    if not da_scrivere:
+        return WriteResult(
+            dataset=FOGLIO_HELPER_CASETYPE,
+            rows_written=0,
+            rows_cleared=0,
+            range_written=f"(nessuno spazio libero entro riga {capienza})",
+            warnings=tuple(warnings),
+        )
+
+    ultima = prima_libera + len(da_scrivere) - 1
+    sht.range(f"A{prima_libera}:B{ultima}").value = [[c, t] for c, t in da_scrivere]
+
+    return WriteResult(
+        dataset=FOGLIO_HELPER_CASETYPE,
+        rows_written=len(da_scrivere),
+        rows_cleared=0,
+        range_written=f"A{prima_libera}:B{ultima}",
+        warnings=tuple(warnings),
+    )
+
+
+def leggi_coppie_helper(book) -> list[tuple[str, str]]:
+    """Le coppie (canale, case type) gia' elencate in 'Helper CaseType'.
+
+    La lista curata vive nel template, non in una config: e' l'utente che
+    decide quali case type vuole vedere e in che ordine, e leggerla da li' vuol
+    dire che riordinarla a mano continua a funzionare.
+    """
+    try:
+        sht = book.sheets[FOGLIO_HELPER_CASETYPE]
+    except Exception:
+        return []
+    ultima = _prima_riga_libera(sht) - 1
+    if ultima < 2:
+        return []
+    valori = sht.range(f"A2:B{ultima}").value
+    if ultima == 2:  # xlwings appiattisce una riga sola
+        valori = [valori]
+    out = []
+    for riga in valori:
+        if not isinstance(riga, (list, tuple)) or len(riga) < 2:
+            continue
+        canale, ct = riga[0], riga[1]
+        if canale and ct and str(canale).strip() and str(ct).strip():
+            out.append((str(canale).strip(), str(ct).strip()))
+    return out
+
+
+def _prima_riga_libera(sht) -> int:
+    """La prima riga in cui la colonna B (case type) e' vuota."""
+    ultima_b = sht.range(f"B{sht.cells.last_cell.row}").end("up").row
+    return max(2, ultima_b + 1)
+
+
+def _capienza_helper(sht) -> int:
+    """Fin dove il template ha preparato le formule di 'Helper CaseType'.
+
+    Si misura sulla colonna D, che porta una formula su ogni riga utilizzabile:
+    l'ultima cella non vuota di quella colonna e' l'ultima riga in cui una
+    coppia nuova viene effettivamente calcolata.
+    """
+    return sht.range(f"{COL_FORMULA_HELPER}{sht.cells.last_cell.row}").end("up").row
 
 
 def _extend_derived_formulas(sht, dataset: Dataset, last_row: int, warnings: list[str]) -> str | None:

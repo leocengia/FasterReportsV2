@@ -9,6 +9,15 @@ Locale: gli export arrivano indifferentemente con `1,5` o `1.5`. Si accettano
 entrambi, ma NON si indovina sui separatori di migliaia ambigui (`1.234` resta
 1.234, non 1234): meglio un numero riconoscibilmente strano che uno plausibile
 e falso.
+
+Lo stesso vale per le date, e qui il progetto ha dovuto rimediare a se stesso:
+`8/10/2026` e' il 10 agosto in un export americano e l'8 ottobre in uno
+europeo, e `_DATETIME_FORMATS` provava il formato europeo per primo — quindi
+scegliera l'8 ottobre, in silenzio, con la stessa fiducia. Un campo che puo'
+essere ambiguo dichiara `date_format` nel contratto (`to_datetime(v, fmt)`
+usa solo quello); dove non e' dichiarato, `data_ambigua` permette al preflight
+di SEGNALARE che quella lettura e' un lancio di moneta, invece di lasciarla
+passare.
 """
 
 from __future__ import annotations
@@ -22,6 +31,9 @@ EXCEL_EPOCH = datetime(1899, 12, 30)
 
 _NUM_RE = re.compile(r"^[+-]?(\d+([.,]\d*)?|[.,]\d+)([eE][+-]?\d+)?$")
 _PCT_RE = re.compile(r"^([+-]?[\d.,]+)\s*%$")
+# Le prime due componenti di una data separata da / o -, quando NON iniziano con
+# un anno a 4 cifre. Serve solo a riconoscere l'ambiguita' giorno/mese.
+_DATA_SEP_RE = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}")
 
 _DATETIME_FORMATS = (
     "%Y-%m-%d %H:%M:%S",
@@ -96,8 +108,38 @@ def to_int(value) -> int | None:
     return int(f)
 
 
-def to_datetime(value) -> datetime | None:
-    """Restituisce un datetime; xlwings lo scrive come data Excel."""
+def data_ambigua(value) -> bool:
+    """`True` se la stringa si legge in due modi diversi, entrambi plausibili.
+
+    `8/10/2026` e' il 10 agosto per un export americano e l'8 ottobre per uno
+    europeo, e nessuna delle due letture e' piu' "giusta" dell'altra guardando
+    solo la stringa. Non e' un caso di scuola: `Date Viewpoint` di SF_DATABASE
+    arriva proprio cosi', e con un solo valore distinto per file (Tableau
+    esporta a granularita' settimanale) non c'e' nemmeno una riga con giorno
+    >12 nella colonna che possa sciogliere il dubbio.
+
+    Serve per SEGNALARE, non per indovinare: quando questo e' vero e il campo
+    non dichiara `date_format`, la lettura in corso e' un lancio di moneta.
+    """
+    if isinstance(value, (datetime, date, int, float)) or is_blank(value):
+        return False
+    m = _DATA_SEP_RE.match(str(value).strip())
+    if not m:
+        return False
+    primo, secondo = int(m.group(1)), int(m.group(2))
+    # Un anno a 4 cifre in testa (`2026-08-10`) fissa l'ordine: non c'e' dubbio.
+    # Uguali (`5/5/2026`) danno la stessa data in entrambe le letture.
+    return 1 <= primo <= 12 and 1 <= secondo <= 12 and primo != secondo
+
+
+def to_datetime(value, fmt: str = "") -> datetime | None:
+    """Restituisce un datetime; xlwings lo scrive come data Excel.
+
+    Con `fmt` si usa SOLO quel formato: e' il modo di leggere una colonna
+    ambigua senza indovinare (vedi `data_ambigua`). Se il formato non combacia
+    l'errore e' immediato, che e' il punto — un export che cambia forma va
+    scoperto subito, non tre settimane dopo guardando un trend storto.
+    """
     if is_blank(value):
         return None
     if isinstance(value, datetime):
@@ -110,9 +152,14 @@ def to_datetime(value) -> datetime | None:
         return _from_excel_serial(float(value))
 
     s = str(value).strip()
-    for fmt in _DATETIME_FORMATS:
+    if fmt:
         try:
             return datetime.strptime(s, fmt)
+        except ValueError:
+            raise Uncoercible(f"{value!r} non e' nel formato dichiarato {fmt!r}") from None
+    for f in _DATETIME_FORMATS:
+        try:
+            return datetime.strptime(s, f)
         except ValueError:
             continue
     try:  # ISO con offset/microsecondi
@@ -145,9 +192,12 @@ COERCERS = {
 }
 
 
-def coerce(value, dtype: str):
+def coerce(value, dtype: str, fmt: str = ""):
+    """Converte nel dtype richiesto. `fmt` vale solo per `datetime`."""
     try:
         fn = COERCERS[dtype]
     except KeyError:
         raise Uncoercible(f"dtype non supportato: {dtype}") from None
+    if dtype == "datetime":
+        return fn(value, fmt)
     return fn(value)

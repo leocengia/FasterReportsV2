@@ -1,9 +1,25 @@
 # Piano: allineare il programma al template WIP (sezione Duplicate Cases)
 
-> **Stato: da fare.** Misurato il 2026-08-19 su `template/Omni_Report_TEMPLATE_WIP.xlsm`
-> (commit `54f8fd7`), 29 fogli, 8,08 MB. Nessuna riga di codice ancora scritta:
-> questo documento è il piano, e ogni numero che contiene è letto dal file, non
-> stimato.
+> **Stato al 2026-08-19: il lato Python è fatto. Restano le fasi 6 e 7, che sono
+> lavoro in Excel.**
+>
+> | fase | contenuto | stato |
+> |---|---|---|
+> | 1 | `tools/audit_workbook.py`: quattro difetti del lettore XML | ✅ `289dd86` |
+> | 2 | template promosso, fixture rigenerata | ✅ `b68f0eb` |
+> | 3 | contratto `DUP_DATASET`, preambolo, coda dei totali | ✅ `0198d0d` |
+> | 4 | capienze, settimana, limite di riga a cella singola | ✅ `1311014` |
+> | 5 | scrittura del preambolo, sezioni vuote attese | ✅ `991c0ba` |
+> | **6** | **template: `M2`/`N2` di `Duplicates Helper`** | **da fare — §4.2** |
+> | **7** | **template: capienze, collegamento esterno, banner** | **da fare — §4.3–4.5** |
+> | 8 | documentazione | ✅ |
+>
+> **617 test passati, 33 nuovi.** La fase 6 è necessaria prima del primo build: il
+> contratto ora scrive date vere, e finché `Duplicates Helper!M2` le parsa con
+> `FIND("/")` quelle colonne danno `#VALUE!`. La fase 7 no — il build gira comunque.
+>
+> Misurato il 2026-08-19 sul template WIP (commit `54f8fd7`), 29 fogli, 8,08 MB.
+> Ogni numero in questo documento è letto dal file, non stimato.
 
 ---
 
@@ -635,14 +651,14 @@ alla 4 tutto gira con `pytest` e con `omni-report check`/`preflight`.
 
 | fase | contenuto | verifica |
 |---|---|---|
-| **1** | §3.12 (bug di `audit_workbook`) + test di regressione | `pytest` |
-| **2** | §4.1 promozione del template, §3.13 fixture rigenerata | i 584 test passano ancora |
-| **3** | §3.1 contratto, §3.2 settings, §3.3 header 14, §3.4 righe di coda | `omni-report contratto`, preflight su un export vero |
-| **4** | §3.9 limite a cella singola, §3.7 capienze, §3.8 nomi, §3.10 settimana | `pytest`, e il preflight che stampa 28/34 agenti |
-| **5** | §3.5 preambolo, §3.6 fogli dipendenti + assenza dichiarata | `pytest` (il pezzo xlwings resta non eseguibile qui) |
+| **1** ✅ | §3.12 (bug di `audit_workbook`) + test di regressione | `pytest` |
+| **2** ✅ | §4.1 promozione del template, §3.13 fixture rigenerata | i 584 test passano ancora |
+| **3** ✅ | §3.1 contratto, §3.2 settings, §3.3 header 14, §3.4 righe di coda | `omni-report contratto`, preflight su un export vero |
+| **4** ✅ | §3.9 limite a cella singola, §3.7 capienze, §3.8 nomi, §3.10 settimana | `pytest`, e il preflight che stampa 28/34 agenti |
+| **5** ✅ | §3.5 preambolo, §3.6 fogli dipendenti + assenza dichiarata | `pytest` (il pezzo xlwings resta non eseguibile qui) |
 | **6** | §4.2 template: `M2`/`N2` | build vero su Windows |
 | **7** | §4.3, §4.4, §4.5 template: capienze, collegamento, banner | build vero + `scan_error_cells` a zero |
-| **8** | §6 documentazione | rilettura |
+| **8** ✅ | §6 documentazione | rilettura |
 
 La fase 6 va **dopo** la 3: se il contratto scrive date vere prima che il
 template smetta di parsare il testo, `Duplicates Helper` esce a `#VALUE!`. Se

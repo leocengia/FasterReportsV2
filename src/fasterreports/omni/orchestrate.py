@@ -375,7 +375,19 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         _colonna(contract.dataset("SF_DATABASE"), sf, "Date Viewpoint") if sf else None
     )
 
+    # Il perimetro dei duplicati si ricava dalle date dei casi chiusi, non dalle
+    # righe di preambolo dell'export: quelle dicono l'intervallo RICHIESTO al
+    # report, queste quello OTTENUTO.
+    dup = blocks.get("DUP_DATASET")
+    dup_closed = (
+        _colonna(contract.dataset("DUP_DATASET"), dup, "Date/Time Closed")
+        if dup and dup.rows else None
+    )
+
     return check_sources(
+        dup_closed=dup_closed,
+        dup_capienze=_dup_capienze(settings),
+        dup_conteggi=_dup_conteggi(contract, blocks),
         column_stats={n: b.stats for n, b in blocks.items() if b.stats},
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
@@ -484,17 +496,70 @@ def _assert_vba_compilabile(template) -> None:
 def _row_limits(contract: Contract, settings: Settings) -> list | None:
     """I limiti di riga scritti nelle formule del template.
 
+    Due scansioni, non una. Quella per intervalli
+    (`SUMIFS(AT_DATASET!$P$2:$P$130000, ...)`) copre tutti i dataset; quella a
+    cella singola solo quelli che dichiarano `read_by_row`, perche' li' il limite
+    non e' un intervallo ma il riferimento puntuale piu' alto — `Duplicates Helper`
+    legge `DUP_DATASET` cella per cella, e senza la seconda scansione quel dataset
+    risulterebbe senza limite noto.
+
     Senza template non si puo' sapere, e non si inventa: si restituisce None e il
     controllo si salta.
     """
     if not settings.template.is_file():
         return None
-    from ..core.templatescan import scan_row_limits
+    from ..core.templatescan import scan_cell_refs, scan_row_limits
 
     try:
-        return scan_row_limits(settings.template, tuple(contract.datasets))
+        limiti = scan_row_limits(settings.template, tuple(contract.datasets))
+        per_riga = tuple(
+            n for n, d in contract.datasets.items() if d.read_by_row
+        )
+        if per_riga:
+            limiti += scan_cell_refs(settings.template, per_riga)
+        return limiti
     except PipelineError:
         return None
+
+
+def _dup_capienze(settings: Settings) -> dict[str, int] | None:
+    """La capienza degli elenchi dei fogli DC, letta dal template.
+
+    Si misura sull'ultima riga con una formula, non su una costante nel codice: se
+    le formule vengono tirate piu' in basso, il controllo lo segue da solo.
+    """
+    if not settings.template.is_file():
+        return None
+    from ..core.duplicati import SCAFFALI, SPILL_ORIGIN, SPILL_ORIGIN_CAPIENZA, punti_da_misurare
+    from ..core.templatescan import scan_formula_extent
+
+    try:
+        estensioni = scan_formula_extent(settings.template, punti_da_misurare())
+    except PipelineError:
+        return None
+    out = {
+        s.etichetta: estensioni[(s.sheet, s.col)] - s.prima_riga + 1
+        for s in SCAFFALI
+        if (s.sheet, s.col) in estensioni
+    }
+    # Lo spill del menu Origin non e' una formula per riga: la sua capienza e' lo
+    # spazio fra dove parte e cio' che lo blocca. Vive nel modulo, con la nota.
+    out[SPILL_ORIGIN.etichetta] = SPILL_ORIGIN_CAPIENZA
+    return out or None
+
+
+def _dup_conteggi(contract: Contract, blocks: dict) -> dict[str, int] | None:
+    """Quanti valori distinti la settimana chiede a ciascun elenco dei fogli DC."""
+    block = blocks.get("DUP_DATASET")
+    if not block or not block.rows:
+        return None
+    from ..core.contract import col_to_index
+    from ..core.duplicati import conteggi
+
+    ds = contract.dataset("DUP_DATASET")
+    start = col_to_index(ds.data_start_col)
+    offset = {f.canonical: f.target_index - start for f in ds.input_fields}
+    return conteggi(block.rows, offset) or None
 
 
 def _last_rows(contract: Contract, blocks: dict) -> dict[str, int]:
@@ -520,7 +585,13 @@ def _case_owners(contract: Contract, blocks: dict) -> dict[str, list]:
     """
     from ..core.contract import col_to_index
 
-    fonti = {"SF_DATABASE": "Employee Name", "PSAT_DATASET": "Agent Name"}
+    # DUP_DATASET e' la terza fonte caso-per-caso: chi ha lavorato duplicati e
+    # non e' in 'Email Agenti' esce dallo stesso controllo, gratis.
+    fonti = {
+        "SF_DATABASE": "Employee Name",
+        "PSAT_DATASET": "Agent Name",
+        "DUP_DATASET": "Full Name",
+    }
     out: dict[str, list] = {}
     for nome_ds, campo in fonti.items():
         block = blocks.get(nome_ds)

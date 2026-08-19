@@ -159,6 +159,60 @@ def scan_cell_refs(path: str | Path, datasets: tuple[str, ...]) -> list[RowLimit
     return sorted(out, key=lambda l: (l.dataset, l.max_row, l.sheet, l.ref))
 
 
+def scan_formula_extent(
+    path: str | Path, punti: tuple[tuple[str, str, int], ...]
+) -> dict[tuple[str, str], int]:
+    """Fin dove arrivano le formule di una colonna: `(foglio, colonna) -> riga`.
+
+    Serve ai fogli che presentano un elenco con **una formula per riga**: l'elenco
+    dei nomi e' un array dinamico e cresce da se', ma le colonne accanto (il
+    conteggio, la media, la percentuale) hanno una formula scritta riga per riga e
+    si fermano dove le ha tirate chi ha fatto il foglio. La voce in eccesso
+    compare nell'elenco **senza nessun numero accanto**: presente e invisibile
+    insieme, senza un solo errore. E' lo stesso difetto tolto a 'Helper CaseType'.
+
+    `punti` sono `(foglio, colonna, prima riga)`; si restituisce l'ultima riga
+    >= `prima riga` che in quella colonna ha una formula.
+
+    La misura si legge dal TEMPLATE e non si scrive nel codice: se domani le
+    formule vengono tirate piu' in basso, il controllo lo segue da solo — lo
+    stesso principio dei formati numerici di 'AHT History'.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise SourceError(f"Template non trovato: {path}")
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SourceError(f"{path.name}: non e' un file .xlsm/.xlsx valido.") from None
+
+    volute: dict[str, list[tuple[str, int]]] = {}
+    for foglio, col, prima in punti:
+        volute.setdefault(foglio, []).append((col, prima))
+
+    out: dict[tuple[str, str], int] = {}
+    with z:
+        fogli = _sheet_targets(z, path)
+        for foglio, colonne in volute.items():
+            target = fogli.get(foglio)
+            if target is None:
+                continue
+            try:
+                raw = z.read(target).decode("utf8", "replace")
+            except KeyError:
+                continue
+            for col, prima in colonne:
+                # Una cella con formula: `<c r="B40" ...><f ...` — anche quando la
+                # formula e' condivisa e il tag e' auto-chiuso, il `<f` c'e'.
+                pat = re.compile(rf'<c r="{col}(\d+)"[^>]*>\s*<f[^>]*[>/]')
+                righe = [
+                    int(m.group(1)) for m in pat.finditer(raw) if int(m.group(1)) >= prima
+                ]
+                if righe:
+                    out[(foglio, col)] = max(righe)
+    return out
+
+
 @dataclass(frozen=True)
 class ErrorCells:
     """Celle di errore trovate in un foglio, per tipo."""

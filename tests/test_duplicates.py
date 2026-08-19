@@ -197,3 +197,138 @@ def test_solo_dup_dataset_dichiara_read_by_row(contract):
     """
     letti_per_riga = {n for n, d in contract.datasets.items() if d.read_by_row}
     assert letti_per_riga == {"DUP_DATASET"}
+
+
+# ---------------------------------------------------------------------------
+# I controlli: settimana e capienze
+# ---------------------------------------------------------------------------
+
+from datetime import datetime  # noqa: E402
+
+from fasterreports.core.coherence import BLOCCA, SEGNALA, check_sources  # noqa: E402
+
+
+def _chiusi(*giorni: str) -> list:
+    return [datetime.fromisoformat(g) for g in giorni]
+
+
+def _finding(rep, frammento):
+    return next((f for f in rep.findings if frammento in f.check), None)
+
+
+def test_settimana_duplicati_allineata_non_dice_niente():
+    rep = check_sources(
+        dup_closed=_chiusi("2026-08-11T10:00", "2026-08-13T15:00"),
+        week_inferred=(2026, 33),
+    )
+    assert _finding(rep, "duplicati") is None
+    assert rep.ok
+
+
+def test_settimana_duplicati_sfasata_blocca():
+    """W32 contro W33: e' il caso che si vedeva nel template.
+
+    Deciso che le due settimane devono coincidere, quindi non SEGNALA: BLOCCA.
+    Un report che porta la sezione duplicati di un'altra settimana non ha nessuna
+    etichetta che lo dica.
+    """
+    rep = check_sources(
+        dup_closed=_chiusi("2026-08-04T10:00", "2026-08-07T15:00"),
+        week_inferred=(2026, 33),
+    )
+    f = _finding(rep, "duplicati e' di un'altra settimana")
+    assert f is not None and f.level == BLOCCA
+    assert not rep.ok
+    # Entrambi i periodi nel messaggio: senza, non si sa quale file riscaricare.
+    testo = f.summary + " ".join(f.details)
+    assert "W32" in testo and "W33" in testo
+    assert "2026-08-04" in testo
+
+
+def test_un_caso_a_cavallo_della_mezzanotte_non_sposta_la_settimana():
+    """La moda dei giorni, non il min/max.
+
+    Lo stesso motivo per cui `_resolve_week` fa cosi' su `AT_DATASET`: un solo
+    caso chiuso appena dentro la settimana precedente non deve far risultare tutto
+    l'export della settimana sbagliata — che sarebbe un blocco falso, e i blocchi
+    falsi si imparano a ignorare.
+    """
+    rep = check_sources(
+        dup_closed=_chiusi(
+            "2026-08-09T23:58",  # domenica: W32
+            "2026-08-11T09:00", "2026-08-12T09:00", "2026-08-13T09:00",  # W33
+        ),
+        week_inferred=(2026, 33),
+    )
+    assert _finding(rep, "duplicati e' di un'altra settimana") is None
+
+
+def test_senza_la_settimana_del_report_il_controllo_si_salta():
+    rep = check_sources(dup_closed=_chiusi("2026-08-04T10:00"), week_inferred=None)
+    f = _finding(rep, "settimana dei duplicati")
+    assert f is not None and f.level == SEGNALA
+    assert rep.ok
+
+
+def test_capienza_all_82_percento_segnala():
+    """28 agenti su 34: e' la misura vera della W32."""
+    rep = check_sources(
+        dup_capienze={"agenti con casi duplicati": 34},
+        dup_conteggi={"agenti con casi duplicati": 28},
+    )
+    f = _finding(rep, "posto quasi finito")
+    assert f is not None and f.level == SEGNALA
+    assert "28 su 34" in f.summary and "82%" in f.summary
+    assert rep.ok
+
+
+def test_capienza_sotto_la_soglia_tace():
+    rep = check_sources(
+        dup_capienze={"record type": 12},
+        dup_conteggi={"record type": 7},
+    )
+    assert _finding(rep, "posto") is None
+
+
+def test_capienza_superata_blocca_e_dice_quante_voci_si_perdono():
+    rep = check_sources(
+        dup_capienze={"agenti con casi duplicati": 34},
+        dup_conteggi={"agenti con casi duplicati": 37},
+    )
+    f = _finding(rep, "posto finito")
+    assert f is not None and f.level == BLOCCA
+    assert "37" in f.summary and "34" in f.summary
+    assert "3 voci in eccesso" in f.hint
+    assert not rep.ok
+
+
+def test_le_capienze_si_misurano_sul_template_vero(contract):
+    """I numeri del piano, riletti dal file invece che ricopiati."""
+    if not TEMPLATE.is_file():
+        pytest.skip("template assente")
+    from dataclasses import replace as _replace
+
+    from fasterreports.omni.orchestrate import _dup_capienze
+    from fasterreports.omni.settings import load_settings
+
+    s = load_settings(ROOT / "config" / "settings.yml")
+    capienze = _dup_capienze(_replace(s, template=TEMPLATE))
+    assert capienze["agenti con casi duplicati"] == 34
+    assert capienze["record type"] == 12
+    assert capienze["Type (case type)"] == 26
+    assert capienze["parent con piu' di un duplicato"] == 20
+    assert capienze["agenti (aree dei grafici)"] == 45
+    assert capienze["Case Origin distinti (menu del filtro)"] == 15
+
+
+def test_i_conteggi_vengono_dai_dati(contract, tmp_path):
+    """Quanti distinti servono, dal blocco appena letto."""
+    from fasterreports.omni.orchestrate import _dup_conteggi
+
+    _ds, _src, block = _blocco(contract, _dup_export(tmp_path, righe=3))
+    conteggi = _dup_conteggi(contract, {"DUP_DATASET": block})
+    assert conteggi["agenti con casi duplicati"] == 3
+    assert conteggi["record type"] == 1        # tutte 'Technical'
+    assert conteggi["Type (case type)"] == 1   # tutte 'Booking Information'
+    # I parent sintetici sono tutti diversi: nessun cluster.
+    assert conteggi["parent con piu' di un duplicato"] == 0

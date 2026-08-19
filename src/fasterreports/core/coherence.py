@@ -97,6 +97,9 @@ def check_sources(
     date_viewpoint: list | None = None,
     casetype_nuovi: list[tuple[str, str]] | None = None,
     casetype_esclusi: tuple[str, ...] = (),
+    dup_closed: list | None = None,
+    dup_capienze: dict[str, int] | None = None,
+    dup_conteggi: dict[str, int] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -144,6 +147,10 @@ def check_sources(
         _check_date_viewpoint(rep, date_viewpoint, week_inferred)
     if casetype_nuovi:
         _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi)
+    if dup_closed:
+        _check_settimana_duplicati(rep, dup_closed, week_inferred)
+    if dup_capienze and dup_conteggi:
+        _check_capienze_duplicati(rep, dup_capienze, dup_conteggi)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -577,6 +584,134 @@ def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
             level=SEGNALA,
             summary=f"{lo} .. {hi} · tutte le {dentro} righe dentro la settimana",
         ))
+
+
+# --- 2ter. la sezione Duplicate Cases --------------------------------------
+
+def _settimana_prevalente(valori: list):
+    """(anno ISO, settimana) della MODA dei giorni, piu' il primo e l'ultimo.
+
+    La moda e non il min/max, per lo stesso motivo per cui `_resolve_week` fa
+    cosi' su `AT_DATASET`: un solo caso chiuso a cavallo della mezzanotte del
+    lunedi' non deve spostare la settimana di tutto l'export.
+    """
+    from collections import Counter
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
+    giorni: list[_date] = []
+    for v in valori:
+        if isinstance(v, _dt):
+            v = v.date()
+        if isinstance(v, _date):
+            giorni.append(v)
+    if not giorni:
+        return None, None, None
+    settimane = Counter(g.isocalendar()[:2] for g in giorni)
+    prevalente = settimane.most_common(1)[0][0]
+    return tuple(prevalente), min(giorni), max(giorni)
+
+
+def _check_settimana_duplicati(rep, closed: list, week_inferred) -> None:
+    """L'export duplicati copre la stessa settimana del resto del report?
+
+    Deciso il 2026-08-19: **la stessa**. Lo sfasamento W32/W33 che si vedeva nel
+    template era un artefatto del montaggio — quello della W32 era il solo export
+    disponibile in quel momento — non un processo che lavora sfasato.
+
+    Quindi BLOCCA, per la stessa ragione di `Date Viewpoint`: un report con
+    l'etichetta sbagliata viene archiviato, ed e' peggio di un report che manca.
+
+    Il perimetro si ricava dalle date dei casi (`Date/Time Closed`) e non dalle
+    righe del preambolo: il preambolo dice l'intervallo RICHIESTO al report, le
+    date dicono quello OTTENUTO, e per l'allineamento conta il secondo — se una
+    settimana non ha duplicati chiusi il lunedi', i due non coincidono.
+    """
+    settimana, primo, ultimo = _settimana_prevalente(closed)
+    if settimana is None:
+        return
+    if not week_inferred:
+        rep.add(Finding(
+            check="settimana dei duplicati",
+            level=SEGNALA,
+            summary=(
+                f"l'export duplicati copre {settimana[0]}-W{settimana[1]:02d} "
+                f"({primo.isoformat()} → {ultimo.isoformat()}), ma non so quella "
+                f"del resto del report"
+            ),
+            hint=(
+                "Senza AT_DATASET non c'e' una settimana con cui confrontarla:\n"
+                "il controllo si salta invece di inventare un confronto."
+            ),
+        ))
+        return
+    if tuple(settimana) == tuple(week_inferred):
+        return
+    rep.add(Finding(
+        check="l'export duplicati e' di un'altra settimana",
+        level=BLOCCA,
+        summary=(
+            f"duplicati {settimana[0]}-W{settimana[1]:02d}, il resto del report "
+            f"{week_inferred[0]}-W{week_inferred[1]:02d}"
+        ),
+        details=[
+            f"duplicati (Date/Time Closed): {primo.isoformat()} → {ultimo.isoformat()}",
+            f"report (dagli altri export): {week_inferred[0]}-W{week_inferred[1]:02d}",
+        ],
+        hint=(
+            "Riscarica il report duplicati con l'intervallo della settimana giusta,\n"
+            "oppure controlla di non aver lasciato in input/ il file della settimana\n"
+            "scorsa.\n"
+            "Un report che porta la sezione duplicati di un'altra settimana non ha\n"
+            "nessuna etichetta che lo dica: i tre fogli DC si leggono come se fossero\n"
+            "della settimana in copertina."
+        ),
+    ))
+
+
+def _check_capienze_duplicati(rep, capienze: dict[str, int], conteggi: dict[str, int]) -> None:
+    """Gli elenchi dei fogli DC hanno posto per quello che c'e' nei dati?
+
+    Gli elenchi sono array dinamici e crescono da se'; le colonne accanto (il
+    conteggio, la media, la percentuale) hanno una formula per riga e si fermano
+    dove sono state tirate. La voce in eccesso compare **senza nessun numero
+    accanto**: presente e invisibile insieme, senza un solo errore. E' lo stesso
+    difetto tolto a 'Helper CaseType' ad agosto.
+
+    Come per i limiti di riga, non si aspetta il superamento: si SEGNALA all'80%,
+    cosi' le formule si tirano quando c'e' tempo e non nella settimana in cui i
+    numeri sono gia' incompleti.
+    """
+    for etichetta, servono in sorted(conteggi.items()):
+        capienza = capienze.get(etichetta)
+        if not capienza or not servono:
+            continue
+        if servono > capienza:
+            rep.add(Finding(
+                check=f"posto finito per {etichetta}",
+                level=BLOCCA,
+                summary=f"{servono} da mostrare, il foglio ne tiene {capienza}",
+                hint=(
+                    f"Le {servono - capienza} voci in eccesso comparirebbero nell'elenco\n"
+                    "senza nessun numero accanto: nessun errore, solo celle vuote\n"
+                    "dove dovrebbe esserci un conteggio.\n"
+                    "Rimedio: tira le formule piu' in basso nel foglio (vedi\n"
+                    "docs/piano-duplicates.md §4.3 per le colonne esatte).\n"
+                    "La capienza viene letta dal template, quindi appena le tiri\n"
+                    "questo controllo se ne accorge da solo."
+                ),
+            ))
+        elif servono > capienza * SOGLIA_ATTENZIONE:
+            rep.add(Finding(
+                check=f"posto quasi finito per {etichetta}",
+                level=SEGNALA,
+                summary=f"{servono} su {capienza} ({servono / capienza:.0%})",
+                hint=(
+                    "Non morde ancora. Ma quando mordera' non lo dira' nessuno: le\n"
+                    "voci in eccesso resteranno nell'elenco senza numeri accanto.\n"
+                    "Conviene tirare le formule adesso, che c'e' tempo."
+                ),
+            ))
 
 
 # --- 3. insiemi di agenti --------------------------------------------------

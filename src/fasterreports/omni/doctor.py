@@ -155,7 +155,9 @@ def _check_template_sheets(rep: CheckReport, settings, contract) -> None:
         rep.add("fogli del template", MANCA, str(exc))
         return
 
-    wanted = {ds.sheet for ds in contract.datasets.values()}
+    # I fogli senza i quali l'Omni Report non e' un Omni Report: i dataset
+    # obbligatori e i fogli su cui gira il motore di malpractice.
+    wanted = {ds.sheet for ds in contract.datasets.values() if not ds.optional}
     extra_needed = {"Anagrafica", "Email Agenti", "Helper Turni", "Helper Malpractice",
                     "Report Agenti", "Dettaglio Malpractice", "Malpractice Recap"}
     missing = sorted((wanted | extra_needed) - present)
@@ -168,6 +170,34 @@ def _check_template_sheets(rep: CheckReport, settings, contract) -> None:
         )
     else:
         rep.add("fogli attesi", OK, f"{len(present)} fogli, tutti quelli richiesti")
+
+    # I fogli delle SEZIONI OPZIONALI, che sono un'altra cosa. Un dataset
+    # `optional` e i fogli che vivono di lui formano un blocco isolato: senza di
+    # loro l'Omni Report resta valido, la macro gira, i numeri di malpractice e
+    # AHT sono quelli. Bloccare sarebbe sbagliato — un template piu' vecchio
+    # (per esempio il campione della W30) deve poter essere ancora usato.
+    #
+    # Ma va detto: un template che li ha PERSI e' un template che ha perso una
+    # sezione, e chi lancia il build non lo scoprirebbe da nessun'altra parte.
+    opzionali: set[str] = set()
+    for ds in contract.datasets.values():
+        if ds.optional:
+            opzionali.add(ds.sheet)
+            opzionali.update(ds.dependent_sheets)
+    assenti = sorted(opzionali - present)
+    if assenti:
+        rep.add(
+            "fogli delle sezioni opzionali", ATTENZIONE,
+            f"assenti: {', '.join(assenti)}",
+            "Non blocca: l'Omni Report e la macro di malpractice non li leggono.\n"
+            "Ma quelle sezioni non compariranno nel report. Se te le aspettavi,\n"
+            "il template non e' quello giusto.",
+        )
+    elif opzionali:
+        rep.add(
+            "fogli delle sezioni opzionali", OK,
+            f"{len(opzionali)} fogli presenti",
+        )
 
 
 def _check_vba(rep: CheckReport, settings) -> None:

@@ -65,6 +65,15 @@ input_files:
   PSAT_DATASET: "PSAT DATASET*"
   Turni: "Turni*"
   Slot Only Cases: "Back*Office*"
+  # Il report Salesforce dei casi chiusi come duplicato/spam. Il report si chiama
+  # "Leo's Orchidea Dup Cases (date interval)": il pattern e' larga perche' il
+  # nome del file scaricato porta l'apostrofo e le parentesi, che in un pattern
+  # sono rumore. Se in input/ finisse un altro file con 'Dup' e 'Cases' nel nome,
+  # `input_path` lo dice invece di indovinare.
+  #
+  # Come per PSAT_DATASET, se il file manca il preflight SEGNALA e il build
+  # prosegue: i tre fogli DC restano vuoti per quella settimana.
+  DUP_DATASET: "*Dup*Cases*"
 
 sources:
   # Skill che entrano nel report. Confronto per UGUAGLIANZA ESATTA, come il

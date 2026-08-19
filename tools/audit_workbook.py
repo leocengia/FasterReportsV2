@@ -41,10 +41,10 @@ DEFAULT_DATASETS = [
     "PSAT_DATASET",
     "Turni",
     "Slot Only Cases",
-    # DUP_DATASET entra qui insieme al suo dataset nel contratto, non prima:
-    # `test_tutti_i_dataset_del_contratto_sono_nei_default` confronta le due
-    # liste in ENTRAMBE le direzioni, e un nome qui senza contratto e' un
-    # foglio che si prova a leggere senza sapere cosa contiene.
+    # Entrato il 2026-08-19 con la sezione Duplicate Cases. E' il primo dataset
+    # con le intestazioni non in riga 1: la riga la dice il contratto, vedi
+    # `header_rows`.
+    "DUP_DATASET",
 ]
 
 # Percorso del contratto rispetto alla radice del repo. Da qui si legge in che

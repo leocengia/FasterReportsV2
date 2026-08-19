@@ -339,6 +339,199 @@ datasets:
           del commento migliore. Fuori contratto, vedi piano §14 domanda 3.
 
   # --------------------------------------------------------------------------
+  # DUP_DATASET — report Salesforce "Leo's Orchidea Dup Cases (date interval)",
+  # cioe' i casi chiusi come duplicato o spam nella settimana.
+  #
+  # E' IL PRIMO DATASET CHE NON E' UNA TABELLA PULITA. E' il report formattato
+  # cosi' come lo scarica Excel, e quindi porta con se':
+  #
+  #   righe 1-13   preambolo: titolo, "As of <quando>", il blocco "Filtered By"
+  #   riga  14     INTESTAZIONI  (colonne B..Q; C non ha nome)
+  #   righe 15..N  i record
+  #   righe N+1,2  la coda dei totali: `Total | Sum | 72,13` e `Count | 178`
+  #
+  # Le due righe di coda si scartano con key_field/stop_values; il preambolo lo
+  # riscrive il writer dal download, cosi' il foglio non dichiara per sempre
+  # "As of 2026-08-13".
+  #
+  # LA COSA DA SAPERE PRIMA DI TOCCARE QUALUNQUE COSA QUI: 'Duplicates Helper'
+  # legge questo foglio CELLA PER CELLA con offset fisso +13 — la sua riga 2 e'
+  # `DUP_DATASET!B15`, la 1001 e' `B1014`. Quindi:
+  #   - header_row 14 non e' una preferenza, e' il contratto con quel foglio;
+  #   - una riga inserita nel preambolo sposterebbe TUTTI i dati di uno, senza
+  #     un solo errore (c'e' un test che lo inchioda);
+  #   - la capienza e' 1000 righe, e la misura `read_by_row` — vedi il campo.
+  #
+  # optional: true — deciso il 2026-08-19. Nessun campo ha un consumatore
+  # `VBA:...`: il motore di malpractice non sa che questo foglio esiste, e la
+  # catena DUP_DATASET -> Duplicates Helper -> 3 fogli DC e' isolata dal resto
+  # del workbook. Se il file manca, il preflight SEGNALA, il foglio viene
+  # scritto VUOTO e l'Omni Report esce comunque.
+  # --------------------------------------------------------------------------
+  DUP_DATASET:
+    sheet: DUP_DATASET
+    header_row: 14
+    data_start_col: B
+    # Oltre l'ultimo campo mappato non c'e' niente, ma `data_end_col` non serve a
+    # dire dove si scrive: serve a dire cosa si PULISCE. La colonna C (senza
+    # intestazione, ospita le etichette `Sum`/`Count`) non e' mappata da nessun
+    # campo, e senza questa riga si porterebbe dietro i totali della settimana
+    # prima.
+    data_end_col: Q
+    optional: true
+    reader: table
+    read_by_row: true
+    key_field: "Full Name"
+    stop_values: ["Total"]
+    dependent_sheets:
+      - "Duplicates Helper"
+      - "DC Dashboard"
+      - "DC Agents & Categories"
+      - "DC Timing & Quality"
+    fields:
+      - canonical: "Full Name"
+        target_col: B
+        role: input
+        dtype: str
+        aliases: ["full_name", "Agent Name"]
+        consumers: ["Duplicates Helper", "Python:coherence"]
+        notes: >
+          L'agente che ha lavorato il caso duplicato. E' il `key_field`: una riga
+          senza questo valore non e' un record. 'Duplicates Helper'!A si difende
+          gia' da solo (`IF(OR(B15="",B15="Total"),"",...)`), ma scrivere le righe
+          di coda sarebbe sbagliato comunque — e il preflight dice quante ne
+          scarta.
+      - canonical: "Case Number"
+        target_col: D
+        role: input
+        dtype: str
+        aliases: ["case_number"]
+        consumers: ["Duplicates Helper"]
+        notes: >
+          dtype str e non int: nell'export e' testo, e 'DC Timing & Quality'
+          lo riconverte con VALUE() dove gli serve confrontarlo con il parent.
+      - canonical: "Parent Case: Case Number"
+        target_col: E
+        role: input
+        dtype: str
+        aliases: ["parent_case_case_number", "Parent Case Number"]
+        consumers: ["Duplicates Helper"]
+        notes: >
+          Il caso di cui questo e' duplicato. E' la colonna su cui si contano i
+          "parent con piu' di un duplicato" e i cluster fra agenti diversi.
+      - canonical: "Status"
+        target_col: F
+        role: input
+        dtype: str
+        aliases: ["status"]
+        consumers: ["Duplicates Helper"]
+        notes: "Closed - Duplicate Case / Closed - Spam."
+      - canonical: "Case Origin"
+        target_col: G
+        role: input
+        dtype: str
+        aliases: ["case_origin"]
+        consumers: ["Duplicates Helper"]
+        notes: >
+          Phone, Contact Us, Internal, Dataloader... NON e' la stessa colonna di
+          SF_DATABASE!U ('Case Origin (group)', valori Phone/Other): qui i valori
+          sono di dettaglio, e il filtro Origin di 'DC Dashboard' li elenca tutti.
+      - canonical: "Date/Time Opened"
+        target_col: H
+        role: input
+        dtype: datetime
+        date_format: "%m/%d/%Y %I:%M %p"
+        aliases: ["date_time_opened"]
+        consumers: ["Duplicates Helper"]
+        notes: >
+          date_format OBBLIGATORIO, e per due motivi diversi.
+          Il primo e' la solita ambiguita': `8/4/2026` si legge sia come 4 agosto
+          (export americano, questo) sia come 8 aprile. Verificato che senza
+          formato dichiarato `8/4/2026 3:59 PM` non e' nemmeno convertibile — la
+          lista dei formati noti non copre `%I:%M %p` senza secondi — quindi qui
+          l'assenza si vedrebbe subito. Ma `Date Viewpoint` insegna che
+          altrove non e' cosi'.
+          Il secondo: NON si puo' ripiegare su dtype str. Nell'export questa
+          colonna e' testo, e il template la parsava con FIND("/"); ma Excel in
+          locale italiano converte `"8/4/2026 3:59 PM"` in DATA al momento della
+          scrittura, e FIND("/") su una data da' #VALUE!. Da qui la decisione D5
+          del piano: si scrivono date vere, e 'Duplicates Helper'!M/N sono
+          diventate `=$K2`/`=$L2`.
+      - canonical: "Date/Time Closed"
+        target_col: I
+        role: input
+        dtype: datetime
+        date_format: "%m/%d/%Y %I:%M %p"
+        aliases: ["date_time_closed"]
+        consumers: ["Duplicates Helper", "Python:coherence"]
+        notes: >
+          Stesso discorso di 'Date/Time Opened'. In piu': e' la colonna su cui il
+          report SF e' filtrato, quindi e' da qui che si ricava la settimana
+          coperta dall'export — e il controllo di coerenza BLOCCA se non e' la
+          stessa del resto del report (D6).
+      - canonical: "Case Age (days)"
+        target_col: J
+        role: input
+        dtype: float
+        aliases: ["case_age_days"]
+        consumers: ["Duplicates Helper"]
+      - canonical: "Case Record Type"
+        target_col: K
+        role: input
+        dtype: str
+        aliases: ["case_record_type"]
+        consumers: ["Duplicates Helper"]
+      - canonical: "Type"
+        target_col: L
+        role: input
+        dtype: str
+        match: exact
+        aliases: []
+        consumers: ["Duplicates Helper"]
+        notes: >
+          match=exact: `Type` e' una parola cosi' corta che qualunque colonna
+          nuova dell'export che normalizzi su 'type' se la prenderebbe. Meglio
+          fallire il preflight che agganciare la colonna sbagliata.
+      - canonical: "Primary Category"
+        target_col: M
+        role: input
+        dtype: str
+        aliases: ["primary_category"]
+        consumers: ["Duplicates Helper"]
+        notes: >
+          Vuota in 106 righe su 178: 'Duplicates Helper'!I la rende `(blank)`
+          apposta, perche' un'etichetta vuota nei raggruppamenti sparirebbe.
+      - canonical: "Language: Language Name"
+        target_col: N
+        role: input
+        dtype: str
+        aliases: ["language_language_name", "Language"]
+        consumers: ["Duplicates Helper"]
+      - canonical: "Email"
+        target_col: O
+        role: input
+        dtype: str
+        aliases: ["email"]
+        consumers: ["Duplicates Helper"]
+      - canonical: "Last Modified By: Full Name"
+        target_col: P
+        role: input
+        dtype: str
+        aliases: ["last_modified_by_full_name"]
+        consumers: []
+        notes: >
+          Nessuna formula la legge. Si mappa per fedelta' al foglio — e perche'
+          una colonna dichiarata e vuota nel preflight dice piu' di una colonna
+          di cui non si sa se esista.
+      - canonical: "Comments/Remarks"
+        target_col: Q
+        role: input
+        dtype: str
+        aliases: ["comments_remarks"]
+        consumers: []
+        notes: "Come sopra. Vuota in tutte le 178 righe della W32."
+
+  # --------------------------------------------------------------------------
   # Turni — NON viene da un CSV: da un roster WFM in forma di matrice larga
   # (un agente per riga, una colonna per giorno, la cella contiene il turno
   # "0900_1300_1330_1630"). L'adattatore `core.wfmsource.read_roster` lo porta

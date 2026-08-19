@@ -4,6 +4,7 @@
     "AT_DATASET": {
       "dimension": "A1:Q130000",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "B": "Agent Email",
         "C": "Supervisor Email",
@@ -26,6 +27,7 @@
     "ATwi_DATASET": {
       "dimension": "A1:P15342",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "B": "Workitem ID",
         "C": "Agent Email",
@@ -47,6 +49,7 @@
     "SF_DATABASE": {
       "dimension": "A1:EM3568",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "A": "Date Viewpoint",
         "B": "Account Name",
@@ -196,6 +199,7 @@
     "PSAT_DATASET": {
       "dimension": "A1:ED132",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "A": "Viewpoint - Deep Dive",
         "B": "Account Record Group",
@@ -336,6 +340,7 @@
     "Turni": {
       "dimension": "A1:I1141",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "A": "Nome agente",
         "B": "Team/Skill",
@@ -351,12 +356,35 @@
     "Slot Only Cases": {
       "dimension": "A1:E1291",
       "hidden": false,
+      "header_row": 1,
       "columns": {
         "A": "chiave (nome BO norm.)",
         "B": "Data",
         "C": "Slot inizio",
         "D": "Slot fine",
         "E": "Stato BO"
+      }
+    },
+    "DUP_DATASET": {
+      "dimension": "A1:Q194",
+      "hidden": false,
+      "header_row": 14,
+      "columns": {
+        "B": "Full Name",
+        "D": "Case Number",
+        "E": "Parent Case: Case Number",
+        "F": "Status",
+        "G": "Case Origin",
+        "H": "Date/Time Opened",
+        "I": "Date/Time Closed",
+        "J": "Case Age (days)",
+        "K": "Case Record Type",
+        "L": "Type",
+        "M": "Primary Category",
+        "N": "Language: Language Name",
+        "O": "Email",
+        "P": "Last Modified By: Full Name",
+        "Q": "Comments/Remarks"
       }
     }
   },
@@ -499,7 +527,48 @@
         "Helper Turni"
       ]
     },
-    "Slot Only Cases": {}
+    "Slot Only Cases": {},
+    "DUP_DATASET": {
+      "B": [
+        "Duplicates Helper"
+      ],
+      "D": [
+        "Duplicates Helper"
+      ],
+      "E": [
+        "Duplicates Helper"
+      ],
+      "F": [
+        "Duplicates Helper"
+      ],
+      "G": [
+        "Duplicates Helper"
+      ],
+      "H": [
+        "Duplicates Helper"
+      ],
+      "I": [
+        "Duplicates Helper"
+      ],
+      "J": [
+        "Duplicates Helper"
+      ],
+      "K": [
+        "Duplicates Helper"
+      ],
+      "L": [
+        "Duplicates Helper"
+      ],
+      "M": [
+        "Duplicates Helper"
+      ],
+      "N": [
+        "Duplicates Helper"
+      ],
+      "O": [
+        "Duplicates Helper"
+      ]
+    }
   },
   "tables": [
     {
@@ -507,7 +576,8 @@
       "ref": "A1:EM3389",
       "sheet": "SF_DATABASE",
       "columns": 143,
-      "sheet_dimension": "A1:EM3568"
+      "sheet_dimension": "A1:EM3568",
+      "sheet_last_data_row": 3389
     }
   ]
 }

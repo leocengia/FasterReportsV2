@@ -62,6 +62,23 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
     try:
         sht = book.sheets[dataset.sheet]
     except Exception:
+        if dataset.optional:
+            # Una sezione opzionale che il template non ha: non e' un guasto, e'
+            # un template piu' vecchio. Il blocco isolato (`dependent_sheets`)
+            # semplicemente non c'e', e il resto dell'Omni Report e' intatto.
+            # Fermarsi qui butterebbe un build valido per una sezione secondaria.
+            return WriteResult(
+                dataset=dataset.name,
+                rows_written=0,
+                rows_cleared=0,
+                range_written="(foglio assente nel template)",
+                warnings=(
+                    f"Il template non contiene il foglio {dataset.sheet!r}: i dati di "
+                    f"{dataset.name} non sono stati scritti da nessuna parte, e "
+                    f"{', '.join(dataset.dependent_sheets) or 'i fogli che lo leggono'} "
+                    f"non compariranno nel report. Il resto del workbook e' valido.",
+                ),
+            )
         raise PipelineError(
             f"Il template non contiene il foglio {dataset.sheet!r}. "
             f"Fogli presenti: {', '.join(s.name for s in book.sheets)}"

@@ -88,6 +88,32 @@ class Dataset:
     # dataset — verificalo in `consumers` prima di cambiarlo: se anche un solo
     # campo e' letto da 'VBA:...', la fonte non e' opzionale.
     optional: bool = False
+    # Il campo che rende una riga un RECORD. Se e' vuoto, la riga non e' un dato:
+    # e' il preambolo, una riga di separazione, o la coda dei totali. Serve agli
+    # export che non sono tabelle pulite — il report Salesforce formattato
+    # finisce con `Total | Sum | 72,13` e `Count | 178`, che senza questo
+    # diventerebbero due agenti di nome 'Total' e ''.
+    key_field: str | None = None
+    # Valori del `key_field` che CHIUDONO la tabella: dalla prima riga che ne
+    # contiene uno, si smette di leggere. `Total` e' l'etichetta del totale
+    # generale dei report SF.
+    stop_values: tuple[str, ...] = ()
+    # Il foglio consumatore legge questo dataset CELLA PER CELLA, non per
+    # intervalli: `Duplicates Helper!A2` e' `DUP_DATASET!B15`, `A3` e' `B16`, e
+    # cosi' via. Il limite di riga sta quindi nel riferimento puntuale piu' alto,
+    # e `templatescan.scan_row_limits` — che cerca intervalli — non lo vede.
+    # Con questo flag lo cerca anche `scan_cell_refs`.
+    #
+    # NON metterlo su un dataset che non e' letto cosi': `Recap PSAT Positive`
+    # punta alla riga FISSA `PSAT_DATASET!DQ130` (l'elogio della settimana,
+    # scelto a mano), e quel 130 verrebbe letto come il limite di PSAT_DATASET,
+    # bloccando ogni settimana con piu' di 130 risposte al sondaggio.
+    read_by_row: bool = False
+    # I fogli che vivono di questo dataset. Se la fonte e' `optional` e manca, le
+    # loro celle di errore sono ATTESE (una divisione per un conteggio a zero) e
+    # non devono far dichiarare fallito un build che invece e' andato come
+    # doveva. Le celle di errore di tutti gli altri fogli continuano a contare.
+    dependent_sheets: tuple[str, ...] = ()
 
     @property
     def input_fields(self) -> tuple[Field, ...]:
@@ -217,10 +243,38 @@ def parse_contract(raw: dict) -> Contract:
                     f"solo assenti."
                 )
 
+        # `key_field` deve essere un campo input dichiarato: se punta a un nome
+        # che non esiste, ogni riga risulterebbe senza chiave e il dataset
+        # uscirebbe VUOTO — un export intero scartato in silenzio.
+        key_field = body.get("key_field")
+        if key_field is not None:
+            key_field = str(key_field)
+            if key_field not in inputs:
+                raise ContractError(
+                    f"Dataset {name}: key_field={key_field!r} non e' un campo "
+                    f"input di questo dataset.\n"
+                    f"  Campi disponibili: {', '.join(sorted(inputs))}\n"
+                    f"  Con una chiave che non esiste ogni riga risulterebbe "
+                    f"senza chiave, e il dataset uscirebbe vuoto senza errori."
+                )
+        stop_values = tuple(str(v) for v in (body.get("stop_values") or []))
+        if stop_values and not key_field:
+            raise ContractError(
+                f"Dataset {name}: stop_values e' impostato ma key_field no. "
+                f"I valori che chiudono la tabella si cercano NELLA chiave: "
+                f"senza key_field non si sa dove guardarli."
+            )
+
         datasets[name] = Dataset(
             name=name,
             reader=reader,
             optional=optional,
+            key_field=key_field,
+            stop_values=stop_values,
+            read_by_row=bool(body.get("read_by_row", False)),
+            dependent_sheets=tuple(
+                str(s) for s in (body.get("dependent_sheets") or [])
+            ),
             sheet=str(body["sheet"]),
             header_row=int(body["header_row"]),
             data_start_col=str(body["data_start_col"]).upper(),

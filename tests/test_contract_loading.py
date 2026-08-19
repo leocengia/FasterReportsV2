@@ -46,13 +46,56 @@ def test_lettera_non_valida():
 
 def test_contratto_reale_si_carica(contract):
     assert set(contract.datasets) == {
-        "AT_DATASET", "ATwi_DATASET", "SF_DATABASE", "PSAT_DATASET",
+        "AT_DATASET", "ATwi_DATASET", "SF_DATABASE", "PSAT_DATASET", "DUP_DATASET",
         "Turni", "Slot Only Cases",
     }
     at = contract.dataset("AT_DATASET")
     assert at.list_object is None
     assert at.max_template_row == 130000
     assert contract.dataset("SF_DATABASE").list_object == "AHT_Data"
+
+
+def test_dup_dataset_e_il_solo_con_le_intestazioni_non_in_riga_1(contract):
+    """`DUP_DATASET` e' il report Salesforce formattato, preambolo compreso.
+
+    Le intestazioni in riga 14 non sono una preferenza: `Duplicates Helper` legge
+    quel foglio cella per cella con offset fisso +13 (la sua riga 2 e'
+    `DUP_DATASET!B15`), quindi 14 e' il contratto con quel foglio. Vedi anche
+    `test_offset_helper_duplicates`, che lo verifica dall'altro capo — sul
+    template vero.
+    """
+    dup = contract.dataset("DUP_DATASET")
+    assert dup.header_row == 14
+    assert dup.data_start_col == "B"
+    assert dup.data_end_col == "Q"
+    assert dup.optional, "nessun campo e' letto dal VBA: la fonte puo' mancare"
+    assert dup.read_by_row, "letto cella per cella: il limite non e' un intervallo"
+    assert dup.key_field == "Full Name"
+    assert dup.stop_values == ("Total",)
+    assert "DC Dashboard" in dup.dependent_sheets
+
+    for altro in contract.datasets.values():
+        if altro.name != "DUP_DATASET":
+            assert altro.header_row == 1, (
+                f"{altro.name} ha le intestazioni in riga {altro.header_row}: "
+                f"se e' voluto, questo test va aggiornato — ma va anche "
+                f"controllato che i suoi consumatori se ne siano accorti."
+            )
+
+
+def test_le_due_colonne_data_dei_duplicati_hanno_il_formato_dichiarato(contract):
+    """Senza `date_format` non sarebbero nemmeno convertibili — e sarebbe la
+    fortuna, non il progetto: `8/4/2026` si legge in due modi."""
+    dup = contract.dataset("DUP_DATASET")
+    per_nome = {f.canonical: f for f in dup.input_fields}
+    for nome in ("Date/Time Opened", "Date/Time Closed"):
+        f = per_nome[nome]
+        assert f.dtype == "datetime", (
+            f"{nome} come testo: Excel in locale italiano convertirebbe "
+            f'"8/4/2026 3:59 PM" in data alla scrittura, e le formule del '
+            f"template che lo parsavano con FIND(\"/\") darebbero #VALUE!"
+        )
+        assert f.date_format == "%m/%d/%Y %I:%M %p"
 
 
 def test_reader_per_dataset(contract):

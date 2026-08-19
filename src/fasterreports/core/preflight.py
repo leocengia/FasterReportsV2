@@ -139,6 +139,21 @@ class PreflightReport:
                     f"  righe scritte: {d.block.n_rows} · "
                     f"intervallo colonne: {d.block.start_col}:{d.block.end_col}"
                 )
+                # Le righe che la sorgente aveva ma che non erano dati. Vanno
+                # dette: se un giorno diventassero molte, vorrebbe dire che la
+                # colonna chiave si e' spostata e mezzo export sta finendo nel
+                # cestino — che senza questa riga sarebbe invisibile.
+                if d.block.dropped:
+                    from collections import Counter
+
+                    conteggio = Counter(d.block.dropped)
+                    voci = ", ".join(
+                        f"{n}× {motivo}" if n > 1 else motivo
+                        for motivo, n in conteggio.most_common()
+                    )
+                    lines.append(
+                        f"  righe sorgente scartate: {len(d.block.dropped)} ({voci})"
+                    )
             unused = d.mapping.unused_headers
             lines.append(f"  colonne sorgente non usate dal motore: {len(unused)}")
             lines.extend(_render_notes(d.notes))

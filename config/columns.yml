@@ -334,9 +334,17 @@ datasets:
         aliases: ["comment", "verbatim"]
         consumers: ["Recap PSAT Positive"]
         notes: >
-          'Elogio della settimana': alcune celle di 'Recap PSAT Positive'
-          puntano alla riga FISSA 130 (DQ130/I130/DO130) = selezione manuale
-          del commento migliore. Fuori contratto, vedi piano §14 domanda 3.
+          'Elogio della settimana': la selezione del commento migliore.
+          NOTA STORICA CORRETTA IL 2026-08-19: questa riga diceva che alcune
+          celle di 'Recap PSAT Positive' puntano alla riga FISSA 130
+          (DQ130/I130/DO130). Verificato: in questo template e nel campione
+          della W30 quel riferimento NON esiste piu' — le formule usano
+          intervalli (`PSAT_DATASET!$DQ$2:$DQ$1000`) e la scelta del commento
+          passa da `$I$8`, cioe' un Case Number scritto sul foglio. Descriveva
+          un workbook precedente. Lasciato perche' il vincolo che ne discendeva
+          e' vero comunque: una formula che punta a una riga scelta a mano non e'
+          un limite di capienza, ed e' il motivo per cui `read_by_row` e'
+          per-dataset (vedi core/contract.py).
 
   # --------------------------------------------------------------------------
   # DUP_DATASET — report Salesforce "Leo's Orchidea Dup Cases (date interval)",

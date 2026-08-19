@@ -48,6 +48,11 @@ class Block:
     end_col: str
     rows: list[list]
     stats: dict[str, ColumnStats]
+    # Righe della sorgente che non erano dati: la coda dei totali di un report
+    # formattato, o righe senza chiave. Vanno RIPORTATE, non solo scartate — un
+    # export che perde metа' delle righe perche' una colonna si e' spostata
+    # produrrebbe lo stesso silenzio di sempre. Il preflight le stampa.
+    dropped: list[str] = field(default_factory=list)
 
     @property
     def n_rows(self) -> int:
@@ -87,8 +92,28 @@ def build_block(
         for off, _, _, canonical, _ in plan
     }
 
+    # La colonna sorgente che rende una riga un RECORD. Se il contratto la
+    # dichiara, una riga senza quel valore non e' un dato: e' la coda dei totali
+    # (`Total | Sum | 72,13`, `Count | 178`) o una riga di separazione. E i
+    # `stop_values` chiudono la tabella: dalla prima riga che ne contiene uno non
+    # c'e' piu' niente di utile sotto.
+    key_idx: int | None = None
+    if dataset.key_field:
+        key_idx = by_canonical[dataset.key_field].source_index
+    stop = {s.casefold() for s in dataset.stop_values}
+
     out: list[list] = []
+    dropped: list[str] = []
     for row in rows:
+        if key_idx is not None:
+            chiave = row[key_idx] if key_idx < len(row) else None
+            testo = "" if chiave is None else str(chiave).strip()
+            if testo.casefold() in stop:
+                dropped.append(f"riga di chiusura ({dataset.key_field}={testo!r})")
+                break
+            if not testo:
+                dropped.append(f"riga senza {dataset.key_field}")
+                continue
         line: list = [None] * width
         for off, src_idx, dtype, canonical, fmt in plan:
             st = stats[canonical]
@@ -132,6 +157,7 @@ def build_block(
         end_col=index_to_col(end),
         rows=out,
         stats=stats,
+        dropped=dropped,
     )
 
 
@@ -184,6 +210,7 @@ def add_derived(dataset: Dataset, block: Block, offset_hours: float) -> Block:
         end_col=index_to_col(new_end),
         rows=rows,
         stats=block.stats,
+        dropped=block.dropped,
     )
 
 

@@ -22,7 +22,7 @@ foglio dove la data e' un numero.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
@@ -43,6 +43,18 @@ class TableSource:
     encoding: str = "xlsx"
     delimiter: str = "(foglio)"
     sheet: str = ""
+    # Le righe SOPRA l'intestazione, nell'ordine, ognuna larga quanto le
+    # intestazioni. Un export normale non ne ha; il report Salesforce formattato
+    # ne ha 13 (titolo, `As of <quando>`, il blocco `Filtered By`), e sono la
+    # sola cosa che dice quale intervallo e' stato chiesto al report. Il writer le
+    # ricopia nel foglio, cosi' `DUP_DATASET` non dichiara per sempre la
+    # settimana in cui e' stato costruito il template.
+    preamble: list[list] = field(default_factory=list)
+    # In che riga del FILE stavano le intestazioni. Non e' `header_row` del
+    # contratto — quella e' la riga del foglio di destinazione. Servono
+    # entrambe, e confonderle vorrebbe dire spostare i dati quando il preambolo
+    # dell'export cambia lunghezza.
+    header_row: int = 1
 
     def rows(self) -> Iterator[list]:
         return iter(self.data)
@@ -56,7 +68,21 @@ def is_excel(path: str | Path) -> bool:
     return Path(path).suffix.lower() in EXCEL_SUFFIXES
 
 
-def find_header_row(sheet, limit: int = 10) -> int:
+# Fin dove cercare la riga di intestazione.
+#
+# Era 10, e non bastava: il report Salesforce formattato (`DUP_DATASET`) mette le
+# intestazioni in **riga 14**, sotto il titolo, la riga `As of <quando>` e il
+# blocco `Filtered By` — una riga per filtro. Con 10 il lettore rispondeva
+# «nessuna riga di intestazione riconoscibile» su un file perfettamente valido.
+#
+# 25 e non 14: il numero di filtri del report puo' cambiare, e con lui la
+# lunghezza del preambolo. Alzare il limite non rende l'euristica piu' incerta —
+# quella distingue un titolo da un'intestazione per LARGHEZZA, e le righe di
+# preambolo hanno una cella ciascuna contro le sedici della riga 14.
+LIMITE_SCANSIONE = 25
+
+
+def find_header_row(sheet, limit: int = LIMITE_SCANSIONE) -> int:
     """La **prima** riga che sembra una riga di intestazioni.
 
     Gli export mettono le intestazioni in riga 1, ma alcuni ci infilano sopra un
@@ -148,6 +174,16 @@ def read_table(
     tutte = [index_to_col(i) for i in range(first, last + 1)]
     headers = [str(hdr.get(c, "")).strip() for c in tutte]
 
+    # Il preambolo si tiene com'e', righe vuote comprese e alla loro posizione:
+    # e' un blocco di testo da ricopiare, non una tabella da ripulire, e gli
+    # spazi bianchi sono parte di come si legge. Per questo si scorre l'intervallo
+    # 1..hrow-1 e non `sheet.rows`: una riga vuota non esiste nell'XML, e
+    # saltarla farebbe scalare di uno tutte quelle sotto.
+    preamble: list[list] = []
+    for rownum in range(1, hrow):
+        row = sheet.row(rownum) if rownum in sheet.rows else {}
+        preamble.append([row.get(c) for c in tutte])
+
     data: list[list] = []
     for rownum in sorted(sheet.rows):
         if rownum <= hrow:
@@ -161,5 +197,6 @@ def read_table(
 
     return TableSource(
         path=path, headers=headers, data=data, sheet=sheet_name,
+        preamble=preamble, header_row=hrow,
         delimiter=f"(foglio {sheet_name!r})" if len(names) > 1 else "(foglio)",
     )

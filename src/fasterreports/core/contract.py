@@ -104,10 +104,13 @@ class Dataset:
     # e `templatescan.scan_row_limits` — che cerca intervalli — non lo vede.
     # Con questo flag lo cerca anche `scan_cell_refs`.
     #
-    # NON metterlo su un dataset che non e' letto cosi': `Recap PSAT Positive`
-    # punta alla riga FISSA `PSAT_DATASET!DQ130` (l'elogio della settimana,
-    # scelto a mano), e quel 130 verrebbe letto come il limite di PSAT_DATASET,
-    # bloccando ogni settimana con piu' di 130 risposte al sondaggio.
+    # NON metterlo su un dataset che non e' letto cosi'. Una formula che punta a
+    # UNA riga scelta a mano — il caso classico e' un commento della settimana
+    # preso da una riga fissa — non e' un limite di capienza, e' una selezione:
+    # letta come limite bloccherebbe ogni settimana con piu' righe di quella.
+    # (Nel template di oggi non ce ne sono; il test
+    # `test_un_riferimento_a_riga_fissa_diventerebbe_un_limite_falso` costruisce
+    # il caso, perche' la proprieta' da difendere e' dello scanner.)
     read_by_row: bool = False
     # I fogli che vivono di questo dataset. Se la fonte e' `optional` e manca, le
     # loro celle di errore sono ATTESE (una divisione per un conteggio a zero) e

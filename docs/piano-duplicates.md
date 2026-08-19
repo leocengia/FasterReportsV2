@@ -139,7 +139,7 @@ cambio:
 
 ---
 
-## 2. Le quattro decisioni prese
+## 2. Le decisioni prese
 
 | # | decisione | scelta |
 |---|---|---|
@@ -148,6 +148,7 @@ cambio:
 | D3 | righe 1–13 di `DUP_DATASET` | **le riscrive Python dal download** |
 | D4 | capienze dei fogli DC | **si allargano nel template + controllo nel preflight** |
 | D5 | colonne data | **date vere + due formule del template semplificate** (§1) |
+| D6 | settimana dei duplicati | **la stessa del resto del report**, e il controllo **BLOCCA** (§3.10) |
 
 ---
 
@@ -385,14 +386,39 @@ L'export è filtrato su `Date/Time Closed` (`>= 8/3/2026`, `<= 8/9/2026 11:30 PM
 nel paste): con `dtype: datetime` (§1) il periodo si ricava **dai dati**, min e
 max della colonna I, e si può confrontare con la settimana del report.
 
-E il confronto serve: nel WIP il paste dei duplicati copre **3–9 agosto (W32)**
-mentre `SF_DATABASE!Date Viewpoint` dice **10 agosto (W33)**. Nel template sono
-residui di due giri diversi, quindi non prova niente da sé — ma prova che le due
-cose possono divergere senza che nulla lo dica.
+**Livello BLOCCA** (deciso il 2026-08-19, D6): l'export duplicati deve coprire la
+**stessa** settimana del resto del report. È la stessa regola che già vale per
+`Date Viewpoint` quando l'export SF è di una settimana diversa, e per la stessa
+ragione: un report con l'etichetta sbagliata **viene archiviato**, ed è peggio di
+un report che manca.
 
-Livello **SEGNALA**, non BLOCCA, e stampando i due periodi: non so se lo
-sfasamento di una settimana sia voluto (i duplicati si chiudono dopo) o un
-incidente. → **domanda in §6.**
+Nel WIP il paste dei duplicati copre **3–9 agosto (W32)** mentre
+`SF_DATABASE!Date Viewpoint` dice **10 agosto (W33)**. Non è un processo
+sfasato: è che al momento del montaggio del template quello della W32 era il
+solo export duplicati disponibile. Quando il report lo genera il programma, le
+due settimane coincidono — quindi lo sfasamento non va tollerato, va bloccato.
+
+Il messaggio deve dire entrambi i periodi e da dove vengono, perché è l'unico
+modo di capire quale dei due file è quello sbagliato:
+
+```
+BLOCCA  settimana dei duplicati diversa dal resto del report
+        duplicati (Date/Time Closed):  03/08/2026 → 09/08/2026  (W32)
+        report    (Date Viewpoint):    10/08/2026 → 16/08/2026  (W33)
+        Scarica di nuovo il report duplicati con l'intervallo della settimana
+        giusta, oppure controlla di non aver lasciato in input/ il file della
+        settimana scorsa.
+```
+
+Nota di attuazione: il perimetro dei duplicati è `Date/Time Closed`, cioè si
+ricava da min/max della colonna `I`, **non** dalle righe del preambolo. Il
+preambolo dice l'intervallo *richiesto* al report; le date dei casi dicono
+l'intervallo *ottenuto*. Se una settimana non ha duplicati chiusi in un certo
+giorno, i due non coincidono — e quello che conta per l'allineamento è il
+secondo. Vale la pena calcolare la settimana ISO dalla **moda** dei giorni, non
+dal min/max, per lo stesso motivo per cui `_resolve_week` la calcola così su
+`AT_DATASET`: un caso chiuso a cavallo della mezzanotte del lunedì non deve
+spostare la settimana di tutto l'export.
 
 ### 3.11 `omni/doctor.py`
 
@@ -576,6 +602,7 @@ chi guarda perché sono lì.
 | `test_dup_assente` | fonte mancante → blocco vuoto, foglio pulito, `#DIV/0!` dei fogli DC classificati come attesi, `BuildResult` non dichiarato fallito |
 | `test_capienze_dc` | SEGNALA all'80%, BLOCCA oltre il 100%, capienze lette dal template |
 | `test_limite_dup_dataset` | la scansione a cella singola trova 1014, e **non** trova 130 su `PSAT_DATASET` |
+| `test_settimana_duplicati` | settimana uguale → OK; W32 contro W33 → **BLOCCA** con entrambi i periodi nel messaggio; un caso chiuso a cavallo della mezzanotte del lunedì **non** sposta la settimana (moda, non min/max) |
 | `test_audit_celle_autochiuse` | regressione del bug §3.12: una cella vuota-formattata non ruba il valore alla successiva |
 | `test_offset_helper_duplicates` | **sul template reale**: `Duplicates Helper!A2` referenzia `DUP_DATASET!B15` e il contratto dice `header_row: 14`. Se qualcuno inserisce una riga nel preambolo, questo test lo grida |
 
@@ -625,23 +652,14 @@ dubbio è quest'ordine il più sicuro.
 
 ---
 
-## 8. Una domanda aperta
+## 8. Nessuna domanda aperta
 
-**I duplicati coprono la stessa settimana del resto del report, o una prima?**
-Nel WIP il paste dei duplicati va dal 3 al 9 agosto (W32) e
-`SF_DATABASE!Date Viewpoint` dice 10 agosto (W33). Sono residui di due giri
-diversi, quindi non provano niente — ma la domanda sul processo resta, e cambia
-un controllo:
+La sola che c'era — se i duplicati coprano la stessa settimana del resto del
+report o quella prima — è chiusa: **stessa settimana** (D6). Lo sfasamento
+W32/W33 visibile nel template è un artefatto del montaggio, non del processo:
+quello della W32 era il solo export duplicati disponibile in quel momento.
+Conseguenza, in §3.10: il controllo **BLOCCA**.
 
-- **stessa settimana** → il controllo di §3.10 diventa **BLOCCA**, come già fa
-  `Date Viewpoint` quando l'export SF è di una settimana diversa dal resto: un
-  report con l'etichetta sbagliata viene archiviato, ed è peggio di un report che
-  manca;
-- **una settimana prima, per scelta** → il controllo verifica lo **sfasamento
-  atteso** (`settimana duplicati == settimana report − 1`) e blocca se lo
-  sfasamento non è quello. Uno scostamento diverso da quello previsto è
-  comunque un errore.
-
-Finché non è deciso, il controllo va scritto a livello **SEGNALA** stampando
-entrambi i periodi: dice quello che sa, senza fingere di sapere quale dei due
-casi è quello giusto.
+Il primo build vero è anche la prima occasione di verificarlo, e va guardata:
+se quel giorno il controllo blocca, l'ipotesi qui sopra era sbagliata e va
+riaperta — non aggirata alzando la soglia.

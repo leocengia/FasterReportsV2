@@ -69,10 +69,25 @@ class Condivisa:
 
 
 def esc(s: object) -> str:
+    """Per il valore di un ATTRIBUTO: le virgolette vanno escapate."""
     return (
         str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def esc_testo(s: object) -> str:
+    """Per il contenuto di un NODO DI TESTO (`<f>`, `<t>`, `<v>`).
+
+    Le virgolette NON si escapano, ed e' importante che questo builder faccia
+    come Excel: in un XML e' lecito scrivere `&quot;` anche in un nodo di testo,
+    ma Excel scrive `"`. Un lettore che cerca `&quot;` dentro il testo di una
+    formula (`IF($K2=&quot;&quot;,...)`) passerebbe i test e fallirebbe sul file
+    vero — ed e' esattamente come e' andata scrivendo
+    `tools/patch_template_duplicates.py`: il regex cercava `&quot;` e rifiutava
+    tutte e 34 le formule del template.
+    """
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
@@ -85,23 +100,23 @@ def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
             cell = f'<c r="{ref}" s="1"/>'
         elif isinstance(val, Condivisa):
             if val.formula is not None:
-                f = f'<f t="shared" ref="{val.ref}" si="{val.si}">{esc(val.formula)}</f>'
+                f = f'<f t="shared" ref="{val.ref}" si="{val.si}">{esc_testo(val.formula)}</f>'
             else:
                 f = f'<f t="shared" si="{val.si}"/>'
-            v = "" if val.valore is None else f"<v>{esc(val.valore)}</v>"
+            v = "" if val.valore is None else f"<v>{esc_testo(val.valore)}</v>"
             cell = f'<c r="{ref}">{f}{v}</c>'
         elif isinstance(val, str) and val.startswith("="):
             # Una FORMULA, non testo: va in <f>, che e' dove la cercano gli
             # strumenti che analizzano il workbook. Scritta come testo, un test
             # sui riferimenti nelle formule sarebbe verde su un file che non ne
             # contiene nessuna.
-            cell = f'<c r="{ref}"><f>{esc(val[1:])}</f></c>'
+            cell = f'<c r="{ref}"><f>{esc_testo(val[1:])}</f></c>'
         elif isinstance(val, bool):
             cell = f'<c r="{ref}" t="b"><v>{int(val)}</v></c>'
         elif isinstance(val, (int, float)):
             cell = f'<c r="{ref}"><v>{val}</v></c>'
         elif shared is None:
-            cell = f'<c r="{ref}" t="inlineStr"><is><t>{esc(val)}</t></is></c>'
+            cell = f'<c r="{ref}" t="inlineStr"><is><t>{esc_testo(val)}</t></is></c>'
         else:
             testo = str(val)
             if testo not in shared:
@@ -171,7 +186,7 @@ def make_workbook(
         for nome, xml in parti:
             z.writestr(nome, xml)
         if shared is not None:
-            si = "".join(f"<si><t>{esc(s)}</t></si>" for s in shared)
+            si = "".join(f"<si><t>{esc_testo(s)}</t></si>" for s in shared)
             z.writestr(
                 "xl/sharedStrings.xml",
                 '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/'

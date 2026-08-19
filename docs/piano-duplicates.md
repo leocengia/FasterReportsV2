@@ -1,7 +1,7 @@
 # Piano: allineare il programma al template WIP (sezione Duplicate Cases)
 
-> **Stato al 2026-08-19: il lato Python è fatto. Restano le fasi 6 e 7, che sono
-> lavoro in Excel.**
+> **Stato al 2026-08-19: fatto, tranne un intervento in Excel che serve solo se il
+> preflight lo chiede.**
 >
 > | fase | contenuto | stato |
 > |---|---|---|
@@ -10,13 +10,24 @@
 > | 3 | contratto `DUP_DATASET`, preambolo, coda dei totali | ✅ `0198d0d` |
 > | 4 | capienze, settimana, limite di riga a cella singola | ✅ `1311014` |
 > | 5 | scrittura del preambolo, sezioni vuote attese | ✅ `991c0ba` |
-> | **6** | **template: `M2`/`N2` di `Duplicates Helper`** | **da fare — §4.2** |
-> | **7** | **template: capienze, collegamento esterno, banner** | **da fare — §4.3–4.5** |
+> | 6 | template: `M2`/`N2` di `Duplicates Helper` | ✅ applicata offline |
+> | 7a | template: collegamento esterno | ✅ applicata offline |
+> | **7b** | **template: capienze dei fogli DC** | **solo se il preflight lo chiede — §4.3** |
+> | 7c | template: banner "nessun duplicato" | facoltativa — §4.5 |
 > | 8 | documentazione | ✅ |
 >
-> **617 test passati, 33 nuovi.** La fase 6 è necessaria prima del primo build: il
-> contratto ora scrive date vere, e finché `Duplicates Helper!M2` le parsa con
-> `FIND("/")` quelle colonne danno `#VALUE!`. La fase 7 no — il build gira comunque.
+> **626 test passati, 42 nuovi. Non resta lavoro obbligatorio in Excel.**
+>
+> Le fasi 6 e 7a sono state applicate al template **offline**, con
+> `tools/patch_template_duplicates.py`: 34 formule riscritte (i 2 master espliciti
+> più i 32 gruppi condivisi di `M`/`N`) e il collegamento esterno rimosso in tutte
+> e quattro le sue tracce. Lo strumento è idempotente e rifiuta di toccare quello
+> che non riconosce; rilanciarlo sul template tracciato dice «già patchato», e
+> c'è un test che lo verifica.
+>
+> La 7b (allargare le capienze) resta manuale **ma è condizionata**: il preflight
+> misura la capienza dal template e la confronta coi dati della settimana, quindi
+> dice lui se serve. Con 28–34 agenti nei duplicati non serve.
 >
 > Misurato il 2026-08-19 sul template WIP (commit `54f8fd7`), 29 fogli, 8,08 MB.
 > Ogni numero in questo documento è letto dal file, non stimato.

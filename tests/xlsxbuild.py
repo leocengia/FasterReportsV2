@@ -15,6 +15,7 @@ Se un test passa solo con uno dei due, il lettore ha un buco.
 from __future__ import annotations
 
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from fasterreports.core.xlsxsource import col_to_index
@@ -33,6 +34,40 @@ _WS_TYPE = (
 _WS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
 
 
+class VuotaFormattata:
+    """Una cella con un formato e NESSUN valore: `<c r="A1" s="1"/>`.
+
+    Excel la scrive **auto-chiusa**, ed e' la forma su cui i lettori a regex si
+    rompono: un pattern che pretende `>...</c>` non chiude il match sulla cella
+    vuota e si mangia il valore di quella dopo. Non e' un caso di laboratorio —
+    la riga 14 di `DUP_DATASET` ha A e C esattamente cosi'.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover — solo per i messaggi di test
+        return "VUOTA_FORMATTATA"
+
+
+VUOTA_FORMATTATA = VuotaFormattata()
+
+
+@dataclass(frozen=True)
+class Condivisa:
+    """Una cella con una formula CONDIVISA (`<f t="shared" .../>`).
+
+    La prima del gruppo porta il testo della formula e l'intervallo (`ref`); le
+    altre hanno solo `si`, e il tag e' **auto-chiuso**. Nel template
+    `Duplicates Helper` ne ha 6993: un lettore che le tratta come tag di apertura
+    incolla insieme il testo di celle diverse.
+    """
+
+    si: int
+    formula: str | None = None  # solo la prima del gruppo
+    ref: str | None = None  # solo la prima del gruppo, es. "M2:M100"
+    valore: object = None
+
+
 def esc(s: object) -> str:
     return (
         str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -46,7 +81,16 @@ def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
     for ref, val in grid.items():
         col = "".join(c for c in ref if c.isalpha())
         num = int("".join(c for c in ref if c.isdigit()))
-        if isinstance(val, str) and val.startswith("="):
+        if isinstance(val, VuotaFormattata):
+            cell = f'<c r="{ref}" s="1"/>'
+        elif isinstance(val, Condivisa):
+            if val.formula is not None:
+                f = f'<f t="shared" ref="{val.ref}" si="{val.si}">{esc(val.formula)}</f>'
+            else:
+                f = f'<f t="shared" si="{val.si}"/>'
+            v = "" if val.valore is None else f"<v>{esc(val.valore)}</v>"
+            cell = f'<c r="{ref}">{f}{v}</c>'
+        elif isinstance(val, str) and val.startswith("="):
             # Una FORMULA, non testo: va in <f>, che e' dove la cercano gli
             # strumenti che analizzano il workbook. Scritta come testo, un test
             # sui riferimenti nelle formule sarebbe verde su un file che non ne

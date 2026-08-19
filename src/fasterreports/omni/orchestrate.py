@@ -60,6 +60,14 @@ class BuildResult:
     # ma con #SPILL!/#REF!/#VALUE! dentro i suoi numeri non sono affidabili: va
     # detto, non lasciato scoprire a chi lo apre.
     error_cells: list = field(default_factory=list)
+    # Le celle di errore che erano ATTESE: i fogli di una sezione opzionale la cui
+    # fonte questa settimana non c'era. Sono divisioni per un conteggio a zero,
+    # cioe' il modo in cui quei fogli dicono "niente dati". Restano elencate — non
+    # si nasconde niente — ma non fanno dichiarare fallito un build che invece e'
+    # andato come doveva.
+    expected_error_cells: list = field(default_factory=list)
+    # Perche' erano attese, in una riga per sezione.
+    expected_reasons: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -70,6 +78,10 @@ class BuildResult:
     @property
     def n_errors(self) -> int:
         return sum(e.total for e in self.error_cells)
+
+    @property
+    def n_expected_errors(self) -> int:
+        return sum(e.total for e in self.expected_error_cells)
 
 
 def _open_source(contract: Contract, settings: Settings, dataset, ctx: dict):
@@ -260,6 +272,10 @@ def run_preflight(
             except PipelineError as exc:
                 ds_report.error = str(exc)
                 continue
+            # Il preambolo del sorgente viaggia col blocco: e' il writer che deve
+            # ricopiarlo, e attaccarlo qui evita di farlo passare attraverso
+            # `build_block`, che di righe che non sono dati non sa niente.
+            block.preamble = list(getattr(source, "preamble", ()) or ())
             ds_report.block = block
             blocks[name] = block
 
@@ -965,14 +981,53 @@ def build(
     except PipelineError:
         errori = []
 
+    attesi, motivi = _errori_attesi(contract, report)
+    veri = [e for e in errori if e.sheet not in attesi]
+    previsti = [e for e in errori if e.sheet in attesi]
+
     return BuildResult(
         workbook=out_path,
         preflight=preflight_path,
         report=report,
         writes=writes,
         macro_ran=macro_ran,
-        error_cells=errori,
+        error_cells=veri,
+        expected_error_cells=previsti,
+        expected_reasons=motivi,
     )
+
+
+def _errori_attesi(contract: Contract, report: PreflightReport):
+    """I fogli in cui le celle di errore, questa settimana, sono la normalita'.
+
+    Quando la fonte di un dataset `optional` manca, il suo foglio viene scritto
+    VUOTO — ed e' giusto: un residuo della settimana prima sarebbe un report
+    sbagliato. Ma i fogli che vivono di quel dataset dividono per un conteggio che
+    ora vale zero, e si riempiono di `#DIV/0!`. Sono 56 celle solo per la sezione
+    duplicati.
+
+    Senza questa distinzione `BuildResult.ok` sarebbe `False`, cioe' il programma
+    dichiarerebbe FALLITO un build andato esattamente come doveva: il file
+    mancava, e il report lo dice. Il che e' peggio di un difetto, perche' insegna
+    a non fidarsi del verdetto.
+
+    Non si nasconde niente: quelle celle restano elencate in
+    `expected_error_cells`, con il motivo accanto.
+    """
+    fogli: set[str] = set()
+    motivi: list[str] = []
+    saltati = {d.name for d in report.datasets if d.skipped_reason}
+    for nome in sorted(saltati):
+        ds = contract.datasets.get(nome)
+        if not ds or not ds.dependent_sheets:
+            continue
+        fogli.update(ds.dependent_sheets)
+        motivi.append(
+            f"{nome}: la fonte non c'era questa settimana, quindi "
+            f"{', '.join(ds.dependent_sheets)} sono vuoti. Le loro celle di errore "
+            f"sono divisioni per un conteggio a zero: attese, non un guasto."
+        )
+    return fogli, motivi
 
 
 def _read_offset(book, contract: Contract) -> float:

@@ -332,3 +332,117 @@ def test_i_conteggi_vengono_dai_dati(contract, tmp_path):
     assert conteggi["Type (case type)"] == 1   # tutte 'Booking Information'
     # I parent sintetici sono tutti diversi: nessun cluster.
     assert conteggi["parent con piu' di un duplicato"] == 0
+
+
+# ---------------------------------------------------------------------------
+# La scrittura: preambolo e sezione vuota
+# ---------------------------------------------------------------------------
+
+from test_writer_derivati import FintoBook, FintoFoglio  # noqa: E402
+
+
+def test_il_preambolo_del_download_finisce_nel_foglio(contract, tmp_path):
+    """Righe 1-13 riscritte da quelle del download, riga 14 mai toccata.
+
+    Senza questo, `DUP_DATASET` direbbe `As of 2026-08-13` per sempre: la data del
+    giorno in cui e' stato costruito il template.
+    """
+    from fasterreports.omni.writer import write_block
+
+    ds, src, block = _blocco(contract, _dup_export(tmp_path, righe=2))
+    block.preamble = list(src.preamble)
+    foglio = FintoFoglio(ultima_usata=194)
+    res = write_block(FintoBook({"DUP_DATASET": foglio}), contract, ds, block)
+
+    assert res.preamble_written == "B1:Q13"
+    scritte = dict(foglio.scritture)
+    assert "B1:Q13" in scritte
+    righe = scritte["B1:Q13"]
+    assert len(righe) == 13
+    assert righe[1][0] == "Leo's Orchidea Dup Cases (date interval)"
+    assert righe[10][0].startswith("Date/Time Closed greater")
+    # Tutte della stessa larghezza: xlwings lo pretende.
+    assert {len(r) for r in righe} == {16}  # B..Q
+
+    # I dati partono dalla 15, e la riga 14 (intestazioni del template) resta.
+    assert res.range_written == "B15:Q16"
+    assert not any(a.split(":")[0].endswith("14") for a, _ in foglio.scritture)
+
+
+def test_un_preambolo_piu_lungo_del_foglio_avvisa_e_non_sposta_i_dati(contract, tmp_path):
+    """Se il report guadagna filtri, il preambolo non ci sta piu'.
+
+    I DATI restano al loro posto — la pipeline li scrive sempre da `header_row+1`,
+    che e' il contratto con 'Duplicates Helper'. E' il preambolo che si tronca, e
+    va detto.
+    """
+    from fasterreports.omni.writer import write_block
+
+    ds, src, block = _blocco(contract, _dup_export(tmp_path, righe=2))
+    block.preamble = list(src.preamble) + [["filtro in piu'"] + [None] * 15]
+    foglio = FintoFoglio(ultima_usata=194)
+    res = write_block(FintoBook({"DUP_DATASET": foglio}), contract, ds, block)
+
+    assert res.preamble_written == "B1:Q13"
+    assert any("14 righe sopra l'intestazione" in w for w in res.warnings)
+    assert res.range_written == "B15:Q16"  # i dati NON si spostano
+
+
+def test_senza_preambolo_non_si_tocca_niente(contract, tmp_path):
+    """Un export pulito (CSV solo dettagli) non ha righe sopra: e non e' un caso
+    da gestire, e' semplicemente niente da fare."""
+    from fasterreports.omni.writer import write_block
+
+    ds, _src, block = _blocco(contract, _dup_export(tmp_path, righe=2))
+    block.preamble = []
+    foglio = FintoFoglio(ultima_usata=194)
+    res = write_block(FintoBook({"DUP_DATASET": foglio}), contract, ds, block)
+    assert res.preamble_written is None
+
+
+def test_un_foglio_assente_per_una_sezione_opzionale_non_ferma_il_build(contract, tmp_path):
+    """Un template piu' vecchio non ha i fogli DC, e deve restare usabile.
+
+    Il campione della W30 e' proprio cosi', ed e' il riferimento golden dei test.
+    Fermarsi butterebbe un build valido per una sezione secondaria.
+    """
+    from fasterreports.omni.writer import write_block
+
+    ds, _src, block = _blocco(contract, _dup_export(tmp_path, righe=2))
+    res = write_block(FintoBook({}), contract, ds, block)
+    assert res.rows_written == 0
+    assert "foglio assente" in res.range_written
+    assert any("DC Dashboard" in w for w in res.warnings)
+
+
+def test_un_foglio_assente_per_un_dataset_obbligatorio_ferma_il_build(contract, tmp_path):
+    from fasterreports.core.errors import PipelineError
+    from fasterreports.omni.writer import write_block
+
+    ds, _src, block = _blocco(contract, _dup_export(tmp_path, righe=2))
+    obbligatorio = contract.dataset("SF_DATABASE")
+    with pytest.raises(PipelineError, match="non contiene il foglio"):
+        write_block(FintoBook({}), contract, obbligatorio, block)
+
+
+def test_le_celle_di_errore_di_una_sezione_vuota_sono_attese(contract):
+    """`#DIV/0!` su un foglio DC quando la fonte manca non e' un guasto.
+
+    Senza questa distinzione il programma dichiarerebbe FALLITO un build andato
+    esattamente come doveva — il file mancava, e il report lo dice. Che e' peggio
+    di un difetto: insegna a non fidarsi del verdetto.
+    """
+    from fasterreports.core.preflight import DatasetReport, PreflightReport
+    from fasterreports.omni.orchestrate import _errori_attesi
+
+    rep = PreflightReport(datasets=[
+        DatasetReport(name="DUP_DATASET", source="?", skipped_reason="file assente"),
+        DatasetReport(name="SF_DATABASE", source="?"),
+    ])
+    fogli, motivi = _errori_attesi(contract, rep)
+    assert "DC Dashboard" in fogli and "Duplicates Helper" in fogli
+    assert len(motivi) == 1 and "DUP_DATASET" in motivi[0]
+
+    # E se la fonte c'era, nessun foglio e' esentato.
+    rep_ok = PreflightReport(datasets=[DatasetReport(name="DUP_DATASET", source="?")])
+    assert _errori_attesi(contract, rep_ok) == (set(), [])

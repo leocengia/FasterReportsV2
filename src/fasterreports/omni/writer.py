@@ -54,6 +54,9 @@ class WriteResult:
     range_written: str
     table_resized: str | None = None
     formulas_extended: str | None = None
+    # L'intervallo in cui e' stato riscritto il preambolo del download (solo per i
+    # dataset con `header_row > 1`).
+    preamble_written: str | None = None
     warnings: tuple[str, ...] = ()
 
 
@@ -89,6 +92,7 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
     start_idx = dataset.start_index
 
     rows_cleared = _clear_data(sht, dataset)
+    preambolo = _write_preamble(sht, dataset, block, warnings)
 
     n = block.n_rows
     if n:
@@ -120,8 +124,66 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
         range_written=addr,
         table_resized=resized,
         formulas_extended=extended,
+        preamble_written=preambolo,
         warnings=tuple(warnings),
     )
+
+
+def _write_preamble(sht, dataset: Dataset, block: Block, warnings: list[str]) -> str | None:
+    """Ricopia nel foglio le righe che nel download stavano sopra l'intestazione.
+
+    Perche' non lasciarle stare. Quelle righe sono il titolo del report, la riga
+    `As of <quando>` e il blocco `Filtered By` — cioe' l'unico posto in cui il
+    foglio dichiara **quale intervallo e' stato chiesto** al report. Se non le si
+    riscrive, restano quelle del giorno in cui e' stato costruito il template: a
+    dicembre il foglio direbbe ancora `As of 2026-08-13` e `Date/Time Closed
+    greater or equal 8/3/2026`. Una data sbagliata che sembra giusta e' il difetto
+    che questo progetto insegue da mesi.
+
+    Le righe del preambolo sono allineate alla stessa griglia di colonne dei dati
+    (quella che `read_table` ha ricavato dall'intestazione del sorgente): la prima
+    cella di ogni riga di preambolo finisce in `data_start_col`. E' l'unica
+    corrispondenza sensata — il preambolo non ha colonne proprie — e per il report
+    SF e' anche quella letterale, perche' li' sia il titolo sia `Full Name` stanno
+    in colonna B.
+
+    NON si tocca la riga delle intestazioni. Quella e' del template, ed e' giusto:
+    'Duplicates Helper' legge `DUP_DATASET` per POSIZIONE, quindi la riga 14 del
+    template *e'* il contratto con quel foglio — e un rename nell'export lo becca
+    il matcher, prima, nel preflight.
+    """
+    if dataset.header_row <= 1 or not block.preamble:
+        return None
+
+    capienza = dataset.header_row - 1
+    righe = block.preamble[:capienza]
+    if len(block.preamble) > capienza:
+        warnings.append(
+            f"{dataset.sheet}: il download ha {len(block.preamble)} righe sopra "
+            f"l'intestazione, il foglio ne tiene {capienza}. Scritte le prime "
+            f"{capienza}, le altre no.\n"
+            f"  Vuol dire che il report ha piu' filtri di prima. I DATI sono a "
+            f"posto — la pipeline li scrive sempre dalla riga "
+            f"{dataset.header_row + 1} — ma il preambolo del foglio ora e' "
+            f"incompleto: conviene allungarlo nel template (e aggiornare "
+            f"header_row, con tutto quello che ne segue)."
+        )
+
+    fine_col = dataset.data_end_col or index_to_col(dataset.last_input_index)
+    sht.range(f"{dataset.data_start_col}1:{fine_col}{capienza}").clear_contents()
+
+    # Larghezza uniforme: xlwings vuole righe tutte della stessa lunghezza, e il
+    # preambolo del sorgente ha righe corte (una cella) accanto a righe vuote.
+    larghezza = col_to_index(fine_col) - dataset.start_index + 1
+    normalizzate = [
+        list(r[:larghezza]) + [None] * max(0, larghezza - len(r)) for r in righe
+    ]
+    if not normalizzate:
+        return None
+    sht.range(
+        f"{dataset.data_start_col}1:{fine_col}{len(normalizzate)}"
+    ).value = normalizzate
+    return f"{dataset.data_start_col}1:{fine_col}{len(normalizzate)}"
 
 
 def _clear_data(sht, dataset: Dataset) -> int:

@@ -156,11 +156,25 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     f"  {w.dataset:14} {w.rows_written:>7} righe -> {w.range_written}"
                     + (f"  [tabella -> {w.table_resized}]" if w.table_resized else "")
+                    + (f"  [preambolo -> {w.preamble_written}]" if w.preamble_written else "")
                 )
                 for warn in w.warnings:
                     print(f"      ! {warn}")
             print(f"Macro {'eseguita' if result.macro_ran else 'NON eseguita'}.")
             print(f"\nFatto: {result.workbook}")
+
+            # Le sezioni che questa settimana sono vuote perche' la loro fonte non
+            # c'era. Va detto in chiaro: i loro fogli contengono #DIV/0!, e chi
+            # apre il file deve sapere che e' voluto e non un guasto.
+            if result.expected_reasons:
+                print("\nSezioni vuote questa settimana (atteso):")
+                for motivo in result.expected_reasons:
+                    print(f"  - {motivo}")
+                if result.expected_error_cells:
+                    print(
+                        f"  Le {result.n_expected_errors} celle di errore di quei "
+                        f"fogli non contano come guasto."
+                    )
 
             # Il workbook c'e' ma potrebbe contenere errori di calcolo: si dice, e
             # si esce con codice diverso da zero. Un file con dentro #SPILL! o

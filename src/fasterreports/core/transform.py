@@ -50,9 +50,15 @@ class Block:
     stats: dict[str, ColumnStats]
     # Righe della sorgente che non erano dati: la coda dei totali di un report
     # formattato, o righe senza chiave. Vanno RIPORTATE, non solo scartate — un
-    # export che perde metа' delle righe perche' una colonna si e' spostata
+    # export che perde meta' delle righe perche' una colonna si e' spostata
     # produrrebbe lo stesso silenzio di sempre. Il preflight le stampa.
     dropped: list[str] = field(default_factory=list)
+    # Le righe SOPRA l'intestazione nella sorgente (titolo, `As of <quando>`, i
+    # filtri del report). Vuoto per un export normale. Le porta il writer nel
+    # foglio, cosi' quelle righe dicono la settimana di questo giro e non quella
+    # in cui e' stato costruito il template. Non le tocca `build_block`: non sono
+    # dati, non hanno colonne canoniche, non si coercizzano.
+    preamble: list[list] = field(default_factory=list)
 
     @property
     def n_rows(self) -> int:
@@ -211,6 +217,7 @@ def add_derived(dataset: Dataset, block: Block, offset_hours: float) -> Block:
         rows=rows,
         stats=block.stats,
         dropped=block.dropped,
+        preamble=block.preamble,
     )
 
 

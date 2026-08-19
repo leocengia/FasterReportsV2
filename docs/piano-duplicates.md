@@ -663,3 +663,108 @@ Conseguenza, in §3.10: il controllo **BLOCCA**.
 Il primo build vero è anche la prima occasione di verificarlo, e va guardata:
 se quel giorno il controllo blocca, l'ipotesi qui sopra era sbagliata e va
 riaperta — non aggirata alzando la soglia.
+
+---
+
+## 9. Rigenerare la W33 — runbook
+
+### Il controllo che decide quale strada prendere
+
+**Se si promuove il template e si lancia il build di oggi, la W33 esce con i
+duplicati della W32 dentro, e nulla lo dice.**
+
+`build()` scrive solo i fogli che il contratto conosce
+(`for name, dataset in contract.datasets.items()`). `DUP_DATASET` non è nel
+contratto → `write_block` non viene mai chiamato su quel foglio → il paste del
+3–9 agosto resta dov'è, e i tre fogli DC calcolano 178 duplicati della **W32**
+dentro `Omni_Report_W33.xlsm`. `scan_error_cells` trova zero celle di errore,
+ed è vero: non c'è nessun errore. Ci sono dati della settimana sbagliata.
+
+È lo stesso difetto delle 130 righe residue di `PSAT_DATASET` — quello per cui
+`optional` scrive il foglio **vuoto** invece di saltarlo.
+
+### Stato di partenza, misurato
+
+| cosa | valore | conseguenza |
+|---|---|---|
+| `data/aht_history.csv` | W22 … **W32** (546 righe) | la W33 **non è mai stata chiusa** dalla pipeline: questo è il primo giro vero, non una ri-generazione |
+| `SF_DATABASE` nel template | Date Viewpoint = **20/07/2026** (W30) | residuo, sovrascritto dal build |
+| `DUP_DATASET` nel template | 3–9 agosto (**W32**), 178 righe | residuo, **non** sovrascritto finché non c'è il contratto |
+| template tracciato | 24 fogli | il WIP ne ha 29 |
+
+### Strada B — la W33 subito, rischio zero
+
+Se la W33 serve adesso e la sezione duplicati può aspettare:
+
+1. **non** promuovere il template: si usa quello tracciato, 24 fogli, senza i
+   fogli DC;
+2. sei file in `input/`, `preflight --week 33`, `build --week 33`.
+
+Si ottiene la W33 identica a come l'avrebbe prodotta prima di questo lavoro. La
+sezione duplicati si collauda sulla **W34**, con calma e su dati che non servono
+a nessuno nell'immediato. Nessuna riga di codice, nessuna modifica al template.
+
+### Strada A — la W33 completa, duplicati compresi
+
+Serve prima:
+
+- **fasi 1–5** del §7 (solo codice; tutte verificabili qui con `pytest` e
+  `preflight`, nessuna richiede Excel);
+- le due modifiche al template **necessarie**: §4.1 (promozione) e §4.2 (`M2`,
+  `N2` di `Duplicates Helper`). In quest'ordine: prima il contratto, poi il
+  template — §7 spiega perché;
+- il report duplicati **riscaricato con l'intervallo della W33**:
+  `Date/Time Closed` da **10/08/2026** a **16/08/2026 23:59**. Con il file della
+  W32 il build **BLOCCA** (D6), ed è quello che deve fare.
+
+Le §4.3 (capienze), §4.4 (collegamento esterno) e §4.5 (banner) **non**
+impediscono il build: si possono fare dopo. Ma la §4.3 va fatta presto — gli
+agenti sono all'82%.
+
+### I passi del run, in entrambe le strade
+
+1. **`input/` deve contenere solo i file della W33.** I pattern devono
+   corrispondere a **un solo** file ciascuno: se resta lì `SF DATABASE W32.csv`,
+   `input_path` solleva «2 file corrispondono a `SF DATABASE*`, non so quale
+   usare». È voluto.
+
+   | pattern | file |
+   |---|---|
+   | `AT DATASET*` | `AT DATASET W33.xlsx` |
+   | `ATwi DATASET*` | `ATwi DATASET W33.xlsx` |
+   | `SF DATABASE*` | `SF DATABASE W33.csv` |
+   | `PSAT DATASET*` | `PSAT DATASET W33.csv` (opzionale) |
+   | `Turni*` | il roster |
+   | `Back*Office*` | il back office |
+   | `*Dup*Cases*` | l'export duplicati — **solo strada A** |
+
+2. **`omni-report check --no-excel`** — o senza `--no-excel` sulla macchina con
+   Excel. Deve dire «fogli attesi OK» e «fonti in input/ 6/6» (7/7 in strada A).
+
+3. **`omni-report preflight --week 33`** → `output/preflight_W33.txt`. Da
+   leggere, non da saltare: è il posto in cui si vede la settimana ricavata dai
+   dati (`Settimana dai dati: W33 2026`), quali colonne sono state agganciate a
+   quali lettere, e i case type nuovi. Non apre Excel: si può lanciare appena
+   arrivano gli export.
+
+4. **`omni-report build --week 33`** → `output/Omni_Report_W33.xlsm`. Richiede
+   Excel desktop e `pip install -e ".[excel]"` (`check` dice che xlwings manca).
+   Oppure `run_report.bat`, che fa 3 e 4 di fila chiedendo la settimana.
+
+5. **Committare `data/aht_history.csv`.** Il build vi aggiunge la W33 (~49
+   righe): è l'unica cosa del progetto che non si ricostruisce rilanciando il
+   programma. `unisci` è idempotente, quindi ri-lanciare la W33 due volte
+   riscrive le stesse righe — ma se il file non viene committato, la settimana è
+   persa.
+
+### Cosa guardare nel primo report W33
+
+- `AHT Trend WoW`: con W22…W33 in storico la finestra mostra **W23…W33** — la
+  W22 esce, ed è giusto (`TAKE(...,11)`);
+- `preflight_W33.txt`, riga `Settimana dai dati`: deve dire W33;
+- in strada A: `DC Dashboard!B9` (numero di duplicati) e la riga 3 di
+  `DUP_DATASET` (`As of ...`) devono parlare della **W33**. Se la riga 3 dice
+  ancora agosto 13, il preambolo non è stato riscritto — §3.5 non funziona;
+- celle di errore: `BuildResult.error_cells` deve essere vuoto. Se compare
+  `#SPILL!` su `DC Agents & Categories` o `DC Dashboard`, è una capienza finita:
+  §4.3.

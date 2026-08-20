@@ -14,12 +14,11 @@ Ordine, e perche':
      copia TEMPORANEA, mai out_path direttamente (`_scrivi_con_copia_atomica`):
      se un run va male a meta', out_path resta quello di prima.
   3. scrittura dei dataset nella copia temporanea.
-  3b. i due fogli DERIVATI ('AHT History', le righe nuove di 'Helper CaseType'):
-     non vengono da un file di input, si calcolano dai dati di SF_DATABASE
-     appena scritti. Vanno qui, dopo il punto 3 — perche' il resize di
-     `AHT_Data` deve essere gia' avvenuto — e prima del punto 4, perche'
-     'AHT Trend WoW' e 'CaseType Deepdive' sono tutte formule e devono
-     ricalcolare su questi valori, non su quelli della settimana precedente.
+  3b. il foglio DERIVATO ('AHT History'): non viene da un file di input, si
+     calcola dai dati di SF_DATABASE appena scritti. Va qui, dopo il punto 3 —
+     perche' il resize di `AHT_Data` deve essere gia' avvenuto — e prima del
+     punto 4, perche' 'AHT Trend WoW' e 'CaseType Deepdive' sono tutte formule e
+     devono ricalcolare su questi valori, non su quelli della settimana prima.
   4. ricalcolo completo. Le formule usano XLOOKUP/FILTER/UNIQUE in array e
      INDIRECT: volatili, un calculate() semplice non propaga sempre.
   5. macro malpractice, in modalita' silenziosa.
@@ -60,6 +59,14 @@ class BuildResult:
     # ma con #SPILL!/#REF!/#VALUE! dentro i suoi numeri non sono affidabili: va
     # detto, non lasciato scoprire a chi lo apre.
     error_cells: list = field(default_factory=list)
+    # Le celle di errore che erano ATTESE: i fogli di una sezione opzionale la cui
+    # fonte questa settimana non c'era. Sono divisioni per un conteggio a zero,
+    # cioe' il modo in cui quei fogli dicono "niente dati". Restano elencate — non
+    # si nasconde niente — ma non fanno dichiarare fallito un build che invece e'
+    # andato come doveva.
+    expected_error_cells: list = field(default_factory=list)
+    # Perche' erano attese, in una riga per sezione.
+    expected_reasons: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -70,6 +77,10 @@ class BuildResult:
     @property
     def n_errors(self) -> int:
         return sum(e.total for e in self.error_cells)
+
+    @property
+    def n_expected_errors(self) -> int:
+        return sum(e.total for e in self.expected_error_cells)
 
 
 def _open_source(contract: Contract, settings: Settings, dataset, ctx: dict):
@@ -260,6 +271,10 @@ def run_preflight(
             except PipelineError as exc:
                 ds_report.error = str(exc)
                 continue
+            # Il preambolo del sorgente viaggia col blocco: e' il writer che deve
+            # ricopiarlo, e attaccarlo qui evita di farlo passare attraverso
+            # `build_block`, che di righe che non sono dati non sa niente.
+            block.preamble = list(getattr(source, "preamble", ()) or ())
             ds_report.block = block
             blocks[name] = block
 
@@ -375,11 +390,24 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         _colonna(contract.dataset("SF_DATABASE"), sf, "Date Viewpoint") if sf else None
     )
 
+    # Il perimetro dei duplicati si ricava dalle date dei casi chiusi, non dalle
+    # righe di preambolo dell'export: quelle dicono l'intervallo RICHIESTO al
+    # report, queste quello OTTENUTO.
+    dup = blocks.get("DUP_DATASET")
+    dup_closed = (
+        _colonna(contract.dataset("DUP_DATASET"), dup, "Date/Time Closed")
+        if dup and dup.rows else None
+    )
+
     return check_sources(
+        dup_closed=dup_closed,
+        dup_capienze=_dup_capienze(settings),
+        dup_conteggi=_dup_conteggi(contract, blocks),
         column_stats={n: b.stats for n, b in blocks.items() if b.stats},
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
-        casetype_esclusi=settings.casetype_esclusi,
+        casetype_heatmap=settings.casetype_heatmap,
+        casetype_pesi=_casetype_pesi(contract, blocks),
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
         turni_rows=turni.rows if turni else None,
@@ -415,12 +443,34 @@ def _casetype_nuovi(contract: Contract, settings: Settings, blocks: dict):
     terne = _terne_sf(contract, blocks)
     if not terne:
         return None
-    from ..core.casetype import coppie_dai_dati, da_appendere
+    from ..core.casetype import coppie_dai_dati, fuori_lista
 
     esistenti = _read_casetype_helper(settings.template)
     if esistenti is None:
         return None
-    return da_appendere(esistenti, coppie_dai_dati((c, t) for c, t, _ in terne)) or None
+    return fuori_lista(esistenti, coppie_dai_dati((c, t) for c, t, _ in terne)) or None
+
+
+def _casetype_pesi(contract: Contract, blocks: dict) -> dict | None:
+    """`{(canale, case type): (volume, AHT medio)}` dai dati di questa settimana.
+
+    Serve alla segnalazione dei case type fuori dalla lista curata: dire che una
+    combinazione resta fuori senza dire quanti casi sono chiede una decisione
+    senza darne gli elementi. Nella W33 'Call Assignment' aveva 30 casi — e
+    'marginale' non e' una parola che si possa usare senza guardare il numero.
+
+    Si riusa `aggrega` con la settimana finta: e' lo stesso conteggio che finisce
+    nello storico, quindi i due numeri non possono divergere.
+    """
+    terne = _terne_sf(contract, blocks)
+    if not terne:
+        return None
+    from ..core.aht_history import aggrega
+
+    return {
+        (r.channel, r.case_type): (r.volume, r.aht)
+        for r in aggrega(terne, iso_year=0, week=0)
+    }
 
 
 def _read_casetype_helper(template) -> list[tuple[str, str]] | None:
@@ -484,17 +534,70 @@ def _assert_vba_compilabile(template) -> None:
 def _row_limits(contract: Contract, settings: Settings) -> list | None:
     """I limiti di riga scritti nelle formule del template.
 
+    Due scansioni, non una. Quella per intervalli
+    (`SUMIFS(AT_DATASET!$P$2:$P$130000, ...)`) copre tutti i dataset; quella a
+    cella singola solo quelli che dichiarano `read_by_row`, perche' li' il limite
+    non e' un intervallo ma il riferimento puntuale piu' alto — `Duplicates Helper`
+    legge `DUP_DATASET` cella per cella, e senza la seconda scansione quel dataset
+    risulterebbe senza limite noto.
+
     Senza template non si puo' sapere, e non si inventa: si restituisce None e il
     controllo si salta.
     """
     if not settings.template.is_file():
         return None
-    from ..core.templatescan import scan_row_limits
+    from ..core.templatescan import scan_cell_refs, scan_row_limits
 
     try:
-        return scan_row_limits(settings.template, tuple(contract.datasets))
+        limiti = scan_row_limits(settings.template, tuple(contract.datasets))
+        per_riga = tuple(
+            n for n, d in contract.datasets.items() if d.read_by_row
+        )
+        if per_riga:
+            limiti += scan_cell_refs(settings.template, per_riga)
+        return limiti
     except PipelineError:
         return None
+
+
+def _dup_capienze(settings: Settings) -> dict[str, int] | None:
+    """La capienza degli elenchi dei fogli DC, letta dal template.
+
+    Si misura sull'ultima riga con una formula, non su una costante nel codice: se
+    le formule vengono tirate piu' in basso, il controllo lo segue da solo.
+    """
+    if not settings.template.is_file():
+        return None
+    from ..core.duplicati import SCAFFALI, SPILL_ORIGIN, SPILL_ORIGIN_CAPIENZA, punti_da_misurare
+    from ..core.templatescan import scan_formula_extent
+
+    try:
+        estensioni = scan_formula_extent(settings.template, punti_da_misurare())
+    except PipelineError:
+        return None
+    out = {
+        s.etichetta: estensioni[(s.sheet, s.col)] - s.prima_riga + 1
+        for s in SCAFFALI
+        if (s.sheet, s.col) in estensioni
+    }
+    # Lo spill del menu Origin non e' una formula per riga: la sua capienza e' lo
+    # spazio fra dove parte e cio' che lo blocca. Vive nel modulo, con la nota.
+    out[SPILL_ORIGIN.etichetta] = SPILL_ORIGIN_CAPIENZA
+    return out or None
+
+
+def _dup_conteggi(contract: Contract, blocks: dict) -> dict[str, int] | None:
+    """Quanti valori distinti la settimana chiede a ciascun elenco dei fogli DC."""
+    block = blocks.get("DUP_DATASET")
+    if not block or not block.rows:
+        return None
+    from ..core.contract import col_to_index
+    from ..core.duplicati import conteggi
+
+    ds = contract.dataset("DUP_DATASET")
+    start = col_to_index(ds.data_start_col)
+    offset = {f.canonical: f.target_index - start for f in ds.input_fields}
+    return conteggi(block.rows, offset) or None
 
 
 def _last_rows(contract: Contract, blocks: dict) -> dict[str, int]:
@@ -520,7 +623,13 @@ def _case_owners(contract: Contract, blocks: dict) -> dict[str, list]:
     """
     from ..core.contract import col_to_index
 
-    fonti = {"SF_DATABASE": "Employee Name", "PSAT_DATASET": "Agent Name"}
+    # DUP_DATASET e' la terza fonte caso-per-caso: chi ha lavorato duplicati e
+    # non e' in 'Email Agenti' esce dallo stesso controllo, gratis.
+    fonti = {
+        "SF_DATABASE": "Employee Name",
+        "PSAT_DATASET": "Agent Name",
+        "DUP_DATASET": "Full Name",
+    }
     out: dict[str, list] = {}
     for nome_ds, campo in fonti.items():
         block = blocks.get(nome_ds)
@@ -703,7 +812,7 @@ def _settimana_storico(contract: Contract, blocks: dict, report: PreflightReport
 
 
 def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict, settimana):
-    """Storico AHT e case type nuovi: le due scritture che non vengono da un file.
+    """Lo storico AHT: la scrittura che non viene da un file di input.
 
     Se non si sa a che settimana appartengono i dati non si scrive niente e si
     dice perche': mettere gli aggregati sotto la settimana sbagliata
@@ -718,15 +827,15 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
     riuscito vorrebbe dire tenere aperto il file dello storico attraverso tutta
     la sequenza Excel, per proteggersi da un caso che non produce danni.
     """
-    from ..core.aht_history import aggrega, carica, righe_foglio, scrivi, unisci
-    from ..core.casetype import coppie_dai_dati, da_appendere
-    from .writer import (
-        FOGLIO_STORICO,
-        WriteResult,
-        append_helper_casetype,
-        leggi_coppie_helper,
-        write_aht_history,
+    from ..core.aht_history import (
+        aggrega,
+        carica,
+        filtra_heatmap,
+        righe_foglio,
+        scrivi,
+        unisci,
     )
+    from .writer import FOGLIO_STORICO, WriteResult, write_aht_history
 
     terne = _terne_sf(contract, blocks)
     if not terne:
@@ -746,21 +855,27 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
         )]
 
     iso_year, week = settimana
-    nuove = aggrega(
-        terne, iso_year=iso_year, week=week, esclusi=settings.casetype_esclusi
-    )
+    # L'ARCHIVIO tiene tutto, senza filtri: e' l'unica cosa che non si
+    # ricostruisce rilanciando il programma.
+    nuove = aggrega(terne, iso_year=iso_year, week=week)
     storico = unisci(carica(settings.aht_history), nuove)
     scrivi(settings.aht_history, storico)
 
-    out = [write_aht_history(book, righe_foglio(storico))]
-    out.append(append_helper_casetype(
-        book,
-        da_appendere(
-            leggi_coppie_helper(book),
-            coppie_dai_dati((c, t) for c, t, _ in terne),
-        ),
-    ))
-    return out
+    # La VISTA tiene i case type che si vogliono nelle heat map.
+    _tenute, fuori = filtra_heatmap(storico, settings.casetype_heatmap or None)
+    avvisi = []
+    if fuori:
+        avvisi.append(
+            f"{len(fuori)} case type sono nell'archivio ma non in "
+            f"aht_history.casetype_heatmap, quindi non compaiono nelle heat map: "
+            + ", ".join(fuori[:6])
+            + (f" (+{len(fuori) - 6})" if len(fuori) > 6 else "")
+            + ". Per farli comparire, aggiungili a quella lista in settings.yml: "
+            "lo storico c'e' gia' tutto e ricompare per intero."
+        )
+    return [write_aht_history(
+        book, righe_foglio(storico, settings.casetype_heatmap or None), avvisi
+    )]
 
 
 def build(
@@ -855,10 +970,10 @@ def build(
                     block = add_derived(dataset, block, offset or 0.0)
                 writes.append(write_block(book, contract, dataset, block))
 
-            # I fogli derivati, DOPO che SF_DATABASE e' stato scritto (e la
+            # Il foglio derivato, DOPO che SF_DATABASE e' stato scritto (e la
             # tabella AHT_Data ridimensionata dal suo write_block) e PRIMA del
-            # ricalcolo: 'AHT Trend WoW' e 'Helper CaseType' sono tutte formule,
-            # e devono ricalcolare su questi dati, non su quelli di prima.
+            # ricalcolo: 'AHT Trend WoW' e 'CaseType Deepdive' sono tutte
+            # formule, e devono ricalcolare su questi dati, non su quelli prima.
             writes.extend(
                 _scrivi_derivati(book, contract, settings, blocks, settimana_storico)
             )
@@ -894,14 +1009,53 @@ def build(
     except PipelineError:
         errori = []
 
+    attesi, motivi = _errori_attesi(contract, report)
+    veri = [e for e in errori if e.sheet not in attesi]
+    previsti = [e for e in errori if e.sheet in attesi]
+
     return BuildResult(
         workbook=out_path,
         preflight=preflight_path,
         report=report,
         writes=writes,
         macro_ran=macro_ran,
-        error_cells=errori,
+        error_cells=veri,
+        expected_error_cells=previsti,
+        expected_reasons=motivi,
     )
+
+
+def _errori_attesi(contract: Contract, report: PreflightReport):
+    """I fogli in cui le celle di errore, questa settimana, sono la normalita'.
+
+    Quando la fonte di un dataset `optional` manca, il suo foglio viene scritto
+    VUOTO — ed e' giusto: un residuo della settimana prima sarebbe un report
+    sbagliato. Ma i fogli che vivono di quel dataset dividono per un conteggio che
+    ora vale zero, e si riempiono di `#DIV/0!`. Sono 56 celle solo per la sezione
+    duplicati.
+
+    Senza questa distinzione `BuildResult.ok` sarebbe `False`, cioe' il programma
+    dichiarerebbe FALLITO un build andato esattamente come doveva: il file
+    mancava, e il report lo dice. Il che e' peggio di un difetto, perche' insegna
+    a non fidarsi del verdetto.
+
+    Non si nasconde niente: quelle celle restano elencate in
+    `expected_error_cells`, con il motivo accanto.
+    """
+    fogli: set[str] = set()
+    motivi: list[str] = []
+    saltati = {d.name for d in report.datasets if d.skipped_reason}
+    for nome in sorted(saltati):
+        ds = contract.datasets.get(nome)
+        if not ds or not ds.dependent_sheets:
+            continue
+        fogli.update(ds.dependent_sheets)
+        motivi.append(
+            f"{nome}: la fonte non c'era questa settimana, quindi "
+            f"{', '.join(ds.dependent_sheets)} sono vuoti. Le loro celle di errore "
+            f"sono divisioni per un conteggio a zero: attese, non un guasto."
+        )
+    return fogli, motivi
 
 
 def _read_offset(book, contract: Contract) -> float:

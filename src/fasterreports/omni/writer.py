@@ -31,10 +31,10 @@ all'ultima riga usata del foglio — che serve, perché nel W30 `Turni` è
 dimensionato fino a riga 1141 mentre i dati sono 252: c'è molto spazio in cui
 possono annidarsi residui di settimane precedenti, e il VBA li leggerebbe.
 
-In fondo al file ci sono due scritture di natura diversa (`write_aht_history`,
-`append_helper_casetype`): non riversano un file di input in un foglio, ma un
-risultato calcolato dai dati di `SF_DATABASE` già letti. Vedi il commento che
-le introduce per il perché non sono `Dataset` del contratto.
+In fondo al file c'è una scrittura di natura diversa (`write_aht_history`): non
+riversa un file di input in un foglio, ma un risultato calcolato dai dati di
+`SF_DATABASE` già letti. Vedi il commento che la introduce per il perché non è un
+`Dataset` del contratto.
 """
 
 from __future__ import annotations
@@ -54,6 +54,9 @@ class WriteResult:
     range_written: str
     table_resized: str | None = None
     formulas_extended: str | None = None
+    # L'intervallo in cui e' stato riscritto il preambolo del download (solo per i
+    # dataset con `header_row > 1`).
+    preamble_written: str | None = None
     warnings: tuple[str, ...] = ()
 
 
@@ -62,6 +65,23 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
     try:
         sht = book.sheets[dataset.sheet]
     except Exception:
+        if dataset.optional:
+            # Una sezione opzionale che il template non ha: non e' un guasto, e'
+            # un template piu' vecchio. Il blocco isolato (`dependent_sheets`)
+            # semplicemente non c'e', e il resto dell'Omni Report e' intatto.
+            # Fermarsi qui butterebbe un build valido per una sezione secondaria.
+            return WriteResult(
+                dataset=dataset.name,
+                rows_written=0,
+                rows_cleared=0,
+                range_written="(foglio assente nel template)",
+                warnings=(
+                    f"Il template non contiene il foglio {dataset.sheet!r}: i dati di "
+                    f"{dataset.name} non sono stati scritti da nessuna parte, e "
+                    f"{', '.join(dataset.dependent_sheets) or 'i fogli che lo leggono'} "
+                    f"non compariranno nel report. Il resto del workbook e' valido.",
+                ),
+            )
         raise PipelineError(
             f"Il template non contiene il foglio {dataset.sheet!r}. "
             f"Fogli presenti: {', '.join(s.name for s in book.sheets)}"
@@ -72,6 +92,7 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
     start_idx = dataset.start_index
 
     rows_cleared = _clear_data(sht, dataset)
+    preambolo = _write_preamble(sht, dataset, block, warnings)
 
     n = block.n_rows
     if n:
@@ -103,8 +124,66 @@ def write_block(book, contract: Contract, dataset: Dataset, block: Block) -> Wri
         range_written=addr,
         table_resized=resized,
         formulas_extended=extended,
+        preamble_written=preambolo,
         warnings=tuple(warnings),
     )
+
+
+def _write_preamble(sht, dataset: Dataset, block: Block, warnings: list[str]) -> str | None:
+    """Ricopia nel foglio le righe che nel download stavano sopra l'intestazione.
+
+    Perche' non lasciarle stare. Quelle righe sono il titolo del report, la riga
+    `As of <quando>` e il blocco `Filtered By` — cioe' l'unico posto in cui il
+    foglio dichiara **quale intervallo e' stato chiesto** al report. Se non le si
+    riscrive, restano quelle del giorno in cui e' stato costruito il template: a
+    dicembre il foglio direbbe ancora `As of 2026-08-13` e `Date/Time Closed
+    greater or equal 8/3/2026`. Una data sbagliata che sembra giusta e' il difetto
+    che questo progetto insegue da mesi.
+
+    Le righe del preambolo sono allineate alla stessa griglia di colonne dei dati
+    (quella che `read_table` ha ricavato dall'intestazione del sorgente): la prima
+    cella di ogni riga di preambolo finisce in `data_start_col`. E' l'unica
+    corrispondenza sensata — il preambolo non ha colonne proprie — e per il report
+    SF e' anche quella letterale, perche' li' sia il titolo sia `Full Name` stanno
+    in colonna B.
+
+    NON si tocca la riga delle intestazioni. Quella e' del template, ed e' giusto:
+    'Duplicates Helper' legge `DUP_DATASET` per POSIZIONE, quindi la riga 14 del
+    template *e'* il contratto con quel foglio — e un rename nell'export lo becca
+    il matcher, prima, nel preflight.
+    """
+    if dataset.header_row <= 1 or not block.preamble:
+        return None
+
+    capienza = dataset.header_row - 1
+    righe = block.preamble[:capienza]
+    if len(block.preamble) > capienza:
+        warnings.append(
+            f"{dataset.sheet}: il download ha {len(block.preamble)} righe sopra "
+            f"l'intestazione, il foglio ne tiene {capienza}. Scritte le prime "
+            f"{capienza}, le altre no.\n"
+            f"  Vuol dire che il report ha piu' filtri di prima. I DATI sono a "
+            f"posto — la pipeline li scrive sempre dalla riga "
+            f"{dataset.header_row + 1} — ma il preambolo del foglio ora e' "
+            f"incompleto: conviene allungarlo nel template (e aggiornare "
+            f"header_row, con tutto quello che ne segue)."
+        )
+
+    fine_col = dataset.data_end_col or index_to_col(dataset.last_input_index)
+    sht.range(f"{dataset.data_start_col}1:{fine_col}{capienza}").clear_contents()
+
+    # Larghezza uniforme: xlwings vuole righe tutte della stessa lunghezza, e il
+    # preambolo del sorgente ha righe corte (una cella) accanto a righe vuote.
+    larghezza = col_to_index(fine_col) - dataset.start_index + 1
+    normalizzate = [
+        list(r[:larghezza]) + [None] * max(0, larghezza - len(r)) for r in righe
+    ]
+    if not normalizzate:
+        return None
+    sht.range(
+        f"{dataset.data_start_col}1:{fine_col}{len(normalizzate)}"
+    ).value = normalizzate
+    return f"{dataset.data_start_col}1:{fine_col}{len(normalizzate)}"
 
 
 def _clear_data(sht, dataset: Dataset) -> int:
@@ -164,22 +243,22 @@ def _resize_table(book, sht, dataset: Dataset, last_row: int, warnings: list[str
 
 
 # ---------------------------------------------------------------------------
-# I due fogli derivati: non vengono da un file di input, si calcolano dai dati
-# di SF_DATABASE che sono gia' stati letti e validati.
+# Il foglio derivato: non viene da un file di input, si calcola dai dati di
+# SF_DATABASE che sono gia' stati letti e validati.
 #
-# Per questo NON sono `Dataset` del contratto: un dataset, qui, e' una sorgente
-# che si importa e si valida. Questi due sono un risultato, e il contratto non
-# ha niente da controllare su di loro.
+# Per questo NON e' un `Dataset` del contratto: un dataset, qui, e' una sorgente
+# che si importa e si valida. Questo e' un risultato, e il contratto non ha
+# niente da controllare su di lui.
+#
+# Fino al 2026-08-20 accanto c'era `append_helper_casetype`, che aggiungeva a
+# 'Helper CaseType' le coppie (canale, case type) viste nei dati e non in lista.
+# E' stata tolta: quella lista E' la lista curata dell'utente, e allargarla da
+# se' faceva entrare nelle heat map di 'AHT Trend WoW' case type che nessuno
+# aveva chiesto. Ora i fuori-lista li ELENCA il preflight, con volume e AHT, e la
+# decisione resta a chi cura la lista.
 # ---------------------------------------------------------------------------
 
 FOGLIO_STORICO = "AHT History"
-FOGLIO_HELPER_CASETYPE = "Helper CaseType"
-# Colonna di 'Helper CaseType' che porta una formula su ogni riga utilizzabile.
-# Serve per misurare fin dove il template ha preparato le formule: scrivere una
-# coppia (canale, case type) oltre quel punto la lascerebbe senza AHT, senza
-# volume e senza categoria — invisibile, che e' il difetto che questo passaggio
-# esiste per togliere.
-COL_FORMULA_HELPER = "D"
 
 
 def write_aht_history(book, righe_foglio: list[list], warnings: list[str] | None = None) -> WriteResult:
@@ -251,125 +330,6 @@ def _propaga_formati(sht, ultima_col: str, ultima_riga: int, warnings: list[str]
                 f"resa a schermo puo' essere grezza (es. 33 invece di W33)."
             )
             return
-
-
-def append_helper_casetype(book, nuove: list[tuple[str, str]]) -> WriteResult:
-    """Aggiunge in fondo a 'Helper CaseType' le coppie (canale, case type) nuove.
-
-    Scrive SOLO le colonne A e B, e SOLO sotto le righe gia' occupate: tutto il
-    resto del foglio sono formule del template, e 'CaseType Deepdive' punta alle
-    righe per posizione. Muovere una riga esistente vorrebbe dire spostare i
-    case type sotto le etichette sbagliate nel deepdive, che l'utente ha
-    formattato a mano.
-
-    Si ferma dove finiscono le formule del template. Una coppia scritta oltre
-    quel punto avrebbe nome e canale ma nessun numero accanto: sarebbe presente
-    e invisibile insieme — cioe' lo stesso difetto che questo passaggio serve a
-    eliminare. Meglio dirlo e non scriverla.
-    """
-    warnings: list[str] = []
-    try:
-        sht = book.sheets[FOGLIO_HELPER_CASETYPE]
-    except Exception:
-        # Non e' fatale: e' un foglio di supporto a un report secondario, e il
-        # resto dell'Omni Report e' valido. Ma va detto.
-        return WriteResult(
-            dataset=FOGLIO_HELPER_CASETYPE,
-            rows_written=0,
-            rows_cleared=0,
-            range_written="(foglio assente)",
-            warnings=(
-                f"Il template non contiene il foglio {FOGLIO_HELPER_CASETYPE!r}: "
-                f"'CaseType Deepdive' non verra' aggiornato con i case type nuovi.",
-            ),
-        )
-
-    if not nuove:
-        return WriteResult(
-            dataset=FOGLIO_HELPER_CASETYPE,
-            rows_written=0,
-            rows_cleared=0,
-            range_written="(nessun case type nuovo)",
-        )
-
-    capienza = _capienza_helper(sht)
-    prima_libera = _prima_riga_libera(sht)
-
-    spazio = capienza - prima_libera + 1
-    da_scrivere = nuove[:spazio] if spazio > 0 else []
-    if len(da_scrivere) < len(nuove):
-        escluse = nuove[len(da_scrivere):]
-        warnings.append(
-            f"{FOGLIO_HELPER_CASETYPE}: le formule del template arrivano a riga "
-            f"{capienza} e lo spazio libero e' finito. {len(escluse)} case type NON "
-            f"sono stati aggiunti: "
-            + ", ".join(f"{c}|{t}" for c, t in escluse[:6])
-            + (f" (+{len(escluse) - 6})" if len(escluse) > 6 else "")
-            + f". Rimedio: trascina le formule di {FOGLIO_HELPER_CASETYPE} piu' in "
-            f"basso (colonne C..AG) e riallarga i loro intervalli di ranking."
-        )
-    if not da_scrivere:
-        return WriteResult(
-            dataset=FOGLIO_HELPER_CASETYPE,
-            rows_written=0,
-            rows_cleared=0,
-            range_written=f"(nessuno spazio libero entro riga {capienza})",
-            warnings=tuple(warnings),
-        )
-
-    ultima = prima_libera + len(da_scrivere) - 1
-    sht.range(f"A{prima_libera}:B{ultima}").value = [[c, t] for c, t in da_scrivere]
-
-    return WriteResult(
-        dataset=FOGLIO_HELPER_CASETYPE,
-        rows_written=len(da_scrivere),
-        rows_cleared=0,
-        range_written=f"A{prima_libera}:B{ultima}",
-        warnings=tuple(warnings),
-    )
-
-
-def leggi_coppie_helper(book) -> list[tuple[str, str]]:
-    """Le coppie (canale, case type) gia' elencate in 'Helper CaseType'.
-
-    La lista curata vive nel template, non in una config: e' l'utente che
-    decide quali case type vuole vedere e in che ordine, e leggerla da li' vuol
-    dire che riordinarla a mano continua a funzionare.
-    """
-    try:
-        sht = book.sheets[FOGLIO_HELPER_CASETYPE]
-    except Exception:
-        return []
-    ultima = _prima_riga_libera(sht) - 1
-    if ultima < 2:
-        return []
-    valori = sht.range(f"A2:B{ultima}").value
-    if ultima == 2:  # xlwings appiattisce una riga sola
-        valori = [valori]
-    out = []
-    for riga in valori:
-        if not isinstance(riga, (list, tuple)) or len(riga) < 2:
-            continue
-        canale, ct = riga[0], riga[1]
-        if canale and ct and str(canale).strip() and str(ct).strip():
-            out.append((str(canale).strip(), str(ct).strip()))
-    return out
-
-
-def _prima_riga_libera(sht) -> int:
-    """La prima riga in cui la colonna B (case type) e' vuota."""
-    ultima_b = sht.range(f"B{sht.cells.last_cell.row}").end("up").row
-    return max(2, ultima_b + 1)
-
-
-def _capienza_helper(sht) -> int:
-    """Fin dove il template ha preparato le formule di 'Helper CaseType'.
-
-    Si misura sulla colonna D, che porta una formula su ogni riga utilizzabile:
-    l'ultima cella non vuota di quella colonna e' l'ultima riga in cui una
-    coppia nuova viene effettivamente calcolata.
-    """
-    return sht.range(f"{COL_FORMULA_HELPER}{sht.cells.last_cell.row}").end("up").row
 
 
 def _extend_derived_formulas(sht, dataset: Dataset, last_row: int, warnings: list[str]) -> str | None:

@@ -109,7 +109,7 @@ def test_fonti_mancanti_non_bloccano(contract, settings, tmp_path):
     rep = run_checks(contract, s, try_excel=False)
     c = _check(rep, "fonti in input")
     assert c.status == ATTENZIONE
-    assert "0/6" in c.detail
+    assert f"0/{len(contract.datasets)}" in c.detail
     # E non e' fra i motivi di blocco.
     assert not c.blocking
 
@@ -123,6 +123,7 @@ def test_fonti_presenti_ok(contract, settings, tmp_path):
         "PSAT DATASET W31.csv",
         "Turni_W31.xlsx",
         "Back_Office_Time_Final.xlsx",
+        "Leo's Orchidea Dup Cases (date interval).xlsx",
     ):
         (tmp_path / nome).write_text("x", encoding="utf-8")
     s = replace(settings, input_dir=tmp_path, template=tmp_path / "assente.xlsm")

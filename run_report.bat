@@ -56,11 +56,11 @@ if "%WEEK%"=="" (
 )
 
 echo.
-echo === Controllo dei CSV in input\ ===
+echo === Controllo delle fonti in input\ ===
 %PYEXE% -m fasterreports.omni.cli preflight --week %WEEK%
 if errorlevel 1 (
     echo.
-    echo I CSV non sono a posto: vedi i punti BLOCCATO qui sopra.
+    echo Le fonti non sono a posto: vedi i punti BLOCCATO qui sopra.
     echo Nessun workbook e' stato prodotto.
     if defined INTERATTIVO pause
     exit /b 1

@@ -309,66 +309,189 @@ def test_su_dati_reali_i_conti_tornano():
 
 
 # ---------------------------------------------------------------------------
-# Case type esclusi dal trend
+# La lista delle heat map: l'archivio tiene tutto, la vista mostra i 27 scelti
 #
-# Non e' un filtro di rumore: sono tipi di caso che non rappresentano lavoro
-# confrontabile. Nel W30 'Call Assignment' aveva 76 casi — piu' di meta' delle
-# combinazioni incluse — ed era comunque tenuto fuori dalle heat map.
+# Fino al 2026-08-20 qui c'erano i test di `casetype_esclusi`, una lista di case
+# type che `aggrega` teneva fuori DALL'ARCHIVIO. Sono stati sostituiti perche' il
+# meccanismo era rovesciato: con una lista di esclusi, un case type mai visto
+# prima entrava nelle heat map da se' — e' quello che e' successo nella W33.
 # ---------------------------------------------------------------------------
 
+HEATMAP = ["EVC", "Booking Information"]
 
-def test_esclude_i_case_type_indicati():
-    righe = [
-        ("Phone", "EVC", 10.0),
-        ("Phone", "Call Assignment", 3.0),
-        ("Other", "Specialty Functions", 8.0),
+
+def _st(*coppie, week=33):
+    return [
+        RigaStorico(2026, week, canale, ct, 10, 12.0) for canale, ct in coppie
     ]
-    out = aggrega(righe, iso_year=2026, week=33,
-                  esclusi=("Call Assignment", "Specialty Functions"))
-    assert [(r.channel, r.case_type) for r in out] == [("Phone", "EVC")]
 
 
-def test_lesclusione_non_guarda_il_volume():
-    """76 casi e resta fuori: la decisione e' sul tipo di caso, non sulla taglia."""
-    righe = [("Phone", "Call Assignment", 3.0)] * 76 + [("Phone", "EVC", 10.0)]
-    out = aggrega(righe, iso_year=2026, week=33, esclusi=("Call Assignment",))
-    assert [r.case_type for r in out] == ["EVC"]
+def test_la_vista_tiene_solo_i_case_type_delle_heatmap():
+    """`AHT Trend WoW`!A5 e' `UNIQUE(FILTER('AHT History'!C...))`: mostra tutto
+    quello che trova nel foglio. Quindi e' il foglio che va filtrato."""
+    from fasterreports.core.aht_history import filtra_heatmap
+
+    storico = _st(("Phone", "EVC"), ("Phone", "Collections"), ("Non-live", "EVC"))
+    tenute, fuori = filtra_heatmap(storico, HEATMAP)
+    assert [(r.channel, r.case_type) for r in tenute] == [
+        ("Non-live", "EVC"), ("Phone", "EVC"),
+    ]
+    assert fuori == ["Collections"]
 
 
-def test_lesclusione_e_insensibile_a_caso_e_spazi():
-    righe = [("Phone", "  Call Assignment ", 3.0), ("Phone", "EVC", 1.0)]
-    out = aggrega(righe, iso_year=2026, week=33, esclusi=("call assignment",))
-    assert [r.case_type for r in out] == ["EVC"]
+def test_il_filtro_e_per_NOME_e_vale_per_entrambi_i_canali():
+    """Nelle heat map del file legacy gli stessi 27 case type comparivano in
+    entrambi i canali: un case type che c'e' per Phone e non per Non-live e'
+    un'assenza di dati, non una scelta."""
+    from fasterreports.core.aht_history import filtra_heatmap
+
+    tenute, fuori = filtra_heatmap(
+        _st(("Phone", "EVC"), ("Non-live", "EVC")), ["EVC"]
+    )
+    assert len(tenute) == 2 and fuori == []
 
 
-def test_escludere_su_entrambi_i_canali():
-    """Un case type escluso esce da tutti i canali, non solo da quello dove
-    l'hai notato."""
-    righe = [("Phone", "Specialty Functions", 1.0), ("Other", "Specialty Functions", 2.0)]
-    assert aggrega(righe, iso_year=2026, week=33, esclusi=("Specialty Functions",)) == []
+def test_senza_lista_non_si_filtra_niente():
+    from fasterreports.core.aht_history import filtra_heatmap
+
+    storico = _st(("Phone", "EVC"), ("Phone", "Collections"))
+    tenute, fuori = filtra_heatmap(storico, None)
+    assert len(tenute) == 2 and fuori == []
 
 
-def test_senza_esclusioni_entra_tutto():
-    righe = [("Phone", "Call Assignment", 3.0), ("Phone", "EVC", 1.0)]
-    assert len(aggrega(righe, iso_year=2026, week=33)) == 2
+def test_righe_foglio_applica_la_lista_delle_heatmap():
+    from fasterreports.core.aht_history import righe_foglio
+
+    righe = righe_foglio(_st(("Phone", "EVC"), ("Phone", "Collections")), HEATMAP)
+    assert [r[2] for r in righe[1:]] == ["EVC"]
 
 
-def test_le_esclusioni_del_repo_corrispondono_alla_curatela_storica():
-    """La lista in settings.yml non e' scelta a tavolino: e' ricavata dalle 11
-    settimane di storico curate a mano. Nessuno dei case type esclusi deve
-    comparire nello storico — se compare, la lista e il file si contraddicono."""
+def test_aggrega_non_filtra_niente():
+    """L'archivio prende tutto: e' l'unica cosa che non si ricostruisce.
+
+    Fino al 2026-08-20 `aggrega` teneva fuori otto case type, e quei dati non
+    esistono piu' per le settimane in cui e' girato cosi'.
+    """
+    righe = aggrega(
+        [("Phone", "Call Assignment", 4.0), ("Phone", "EVC", 10.0)],
+        iso_year=2026,
+        week=33,
+    )
+    assert sorted(r.case_type for r in righe) == ["Call Assignment", "EVC"]
+
+
+def test_l_archivio_tiene_tutto_e_la_lista_e_reversibile():
+    """E' il guadagno del filtro a valle: aggiungere un case type alla lista lo
+    fa comparire con TUTTE le settimane che l'archivio ha.
+
+    Col filtro in `aggrega` avrebbe avuto un dato su dodici colonne — cioe'
+    esattamente l'artefatto per cui il filtro esiste.
+    """
+    from fasterreports.core.aht_history import filtra_heatmap, righe_foglio
+
+    archivio = (
+        _st(("Phone", "Collections"), week=31)
+        + _st(("Phone", "Collections"), week=32)
+        + _st(("Phone", "Collections"), week=33)
+    )
+    assert righe_foglio(archivio, HEATMAP) == [list(COLONNE)]
+    tenute, _ = filtra_heatmap(archivio, HEATMAP + ["Collections"])
+    assert sorted(r.week for r in tenute) == [31, 32, 33]
+
+
+def test_riscrivere_una_settimana_la_sostituisce_per_intero():
+    """Il caso della W33: due coppie erano gia' finite nel CSV.
+
+    Con la sostituzione riga per riga sarebbero rimaste per sempre — il giro
+    nuovo non le produce, quindi non le sovrascrive, quindi nessuno le tocca
+    piu'. Silenzioso e permanente.
+    """
+    prima = _st(("Phone", "EVC"), ("Phone", "Collections"), week=33)
+    dopo = _st(("Phone", "EVC"), week=33)
+    unito = unisci(prima, dopo)
+    assert [(r.week, r.case_type) for r in unito] == [(33, "EVC")]
+
+
+def test_riscrivere_una_settimana_non_tocca_le_altre():
+    prima = _st(("Phone", "EVC"), week=32) + _st(("Phone", "Collections"), week=33)
+    unito = unisci(prima, _st(("Phone", "EVC"), week=33))
+    assert sorted((r.week, r.case_type) for r in unito) == [
+        (32, "EVC"), (33, "EVC"),
+    ]
+
+
+def test_la_lista_delle_heatmap_copre_tutto_lo_storico():
+    """La prova che la lista non fa sparire righe da undici settimane.
+
+    Si verifica sui FILE VERI, `config/settings.yml` contro
+    `data/aht_history.csv`: ogni case type dello storico deve essere nella lista
+    delle heat map. Se non lo fosse, applicare il filtro farebbe sparire delle
+    righe — e undici settimane di curatela a mano non si ricostruiscono.
+
+    Misurato il 2026-08-20: la lista ha 27 nomi, lo storico W22..W32 ne usa
+    esattamente 27, e sono gli stessi 27 delle heat map del file Excel legacy.
+    Non sono i 31 di 'Helper CaseType': quel foglio serve a 'CaseType Deepdive',
+    e i 4 in piu' (`Booking Research (Rates)`, `Bulk Update Request`,
+    `Contract Update`, `Traveler Outreach`) non vanno nelle heat map.
+    """
+    import csv
+
     from fasterreports.omni.settings import load_settings
 
-    root = Path(__file__).resolve().parents[1]
-    s = load_settings(root / "config" / "settings.yml", root=root)
-    assert s.casetype_esclusi, "settings.yml non dichiara casetype_esclusi"
+    ROOT = Path(__file__).resolve().parents[1]
+    cfg = ROOT / "config" / "settings.yml"
+    csv_path = ROOT / "data" / "aht_history.csv"
+    if not (cfg.is_file() and csv_path.is_file()):
+        pytest.skip("config o storico assenti")
 
-    storico = carica(root / "data" / "aht_history.csv")
-    if not storico:
-        pytest.skip("storico non presente")
-    presenti = {r.case_type.casefold() for r in storico}
-    intrusi = sorted(t for t in s.casetype_esclusi if t.casefold() in presenti)
-    assert not intrusi, (
-        f"questi case type sono dichiarati esclusi ma stanno nello storico: "
-        f"{intrusi}. Togli la riga da settings.yml, oppure togli le righe dal CSV."
+    ammessi = {c.strip() for c in load_settings(cfg).casetype_heatmap}
+    assert len(ammessi) >= 20, f"lista sospettosamente corta: {len(ammessi)}"
+    assert "Rates & Inventory Changes" in ammessi, (
+        "il nome con la & non e' arrivato intero: il filtro butterebbe via un "
+        "case type vero"
     )
+
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        storico = {r["case_type"].strip() for r in csv.DictReader(f)}
+
+    fuori = sorted(storico - ammessi)
+    assert not fuori, (
+        f"{len(fuori)} case type dello storico NON sono in "
+        f"aht_history.casetype_heatmap: applicando il filtro sparirebbero dalle "
+        f"heat map.\n"
+        f"  {fuori}\n"
+        f"  Se e' voluto, va detto qui; se non lo e', vanno aggiunti alla lista."
+    )
+
+
+def test_la_lista_delle_heatmap_non_e_quella_di_helper_casetype():
+    """Sono due liste diverse, e confonderle e' l'errore che ho fatto.
+
+    'Helper CaseType' alimenta 'CaseType Deepdive' e ne elenca 31; le heat map
+    ne vogliono 27. I 4 di differenza entrerebbero nelle heat map senza che
+    nessuno li abbia chiesti — che e' il difetto da cui e' partita la correzione.
+    """
+    from fasterreports.omni.orchestrate import _read_casetype_helper
+    from fasterreports.omni.settings import load_settings
+
+    ROOT = Path(__file__).resolve().parents[1]
+    template = ROOT / "template" / "Omni_Report_TEMPLATE.xlsm"
+    cfg = ROOT / "config" / "settings.yml"
+    if not (template.is_file() and cfg.is_file()):
+        pytest.skip("template o config assenti")
+
+    helper = _read_casetype_helper(template)
+    assert helper is not None
+    nomi_helper = {t.strip() for _c, t in helper}
+    ammessi = {c.strip() for c in load_settings(cfg).casetype_heatmap}
+
+    assert ammessi < nomi_helper, (
+        "la lista delle heat map dovrebbe essere un sottoinsieme PROPRIO di "
+        "'Helper CaseType': se coincidessero, tanto valeva leggere da la'"
+    )
+    assert sorted(nomi_helper - ammessi) == [
+        "Booking Research (Rates)",
+        "Bulk Update Request",
+        "Contract Update",
+        "Traveler Outreach",
+    ]

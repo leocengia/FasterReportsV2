@@ -96,7 +96,11 @@ def check_sources(
     column_stats: dict[str, dict] | None = None,
     date_viewpoint: list | None = None,
     casetype_nuovi: list[tuple[str, str]] | None = None,
-    casetype_esclusi: tuple[str, ...] = (),
+    casetype_heatmap: tuple[str, ...] = (),
+    casetype_pesi: dict | None = None,
+    dup_closed: list | None = None,
+    dup_capienze: dict[str, int] | None = None,
+    dup_conteggi: dict[str, int] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -143,7 +147,13 @@ def check_sources(
     if date_viewpoint:
         _check_date_viewpoint(rep, date_viewpoint, week_inferred)
     if casetype_nuovi:
-        _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi)
+        _check_casetype_nuovi(rep, casetype_nuovi, casetype_pesi)
+    if casetype_heatmap and casetype_pesi:
+        _check_casetype_fuori_heatmap(rep, casetype_heatmap, casetype_pesi)
+    if dup_closed:
+        _check_settimana_duplicati(rep, dup_closed, week_inferred)
+    if dup_capienze and dup_conteggi:
+        _check_capienze_duplicati(rep, dup_capienze, dup_conteggi)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -403,49 +413,105 @@ def _check_date_viewpoint(rep, valori: list, week_inferred) -> None:
             ))
 
 
-def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], esclusi=()) -> None:
-    """Case type nei dati che il template non conosceva.
+def _riga_peso(canale, ct, pesi) -> str:
+    """`Phone | EVC   30 casi, AHT 4.5 min`, o senza numeri se non ce ne sono."""
+    p = (pesi or {}).get((canale, ct))
+    testo = f"{canale} | {ct}" if canale else ct
+    if not p:
+        return testo
+    vol, aht = p
+    testo += f"   {vol} casi"
+    if aht:
+        testo += f", AHT {aht:.1f} min"
+    return testo
 
-    Vengono appesi automaticamente a 'Helper CaseType', quindi non si perde
-    niente. Ma la conseguenza da segnalare e' un'altra, e riguarda il trend:
-    un case type nuovo che non e' nella lista delle esclusioni **entra nelle
-    heat map**, dove finora non c'era. Il grafico cambia forma, e chi lo guarda
-    la settimana dopo non ha modo di sapere perche'.
 
-    Quindi i nuovi si dividono in due, e i due gruppi vogliono azioni diverse:
-    quelli esclusi non richiedono niente, gli altri richiedono una decisione —
-    tenerli nel trend o aggiungerli a `aht_history.casetype_esclusi`.
+def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], pesi=None) -> None:
+    """Combinazioni (canale, case type) che 'Helper CaseType' non elenca.
+
+    Conseguenza, e riguarda UN SOLO foglio: non compaiono in 'CaseType
+    Deepdive', che mostra la lista scritta a mano in quell'helper (e ci punta per
+    posizione, con la formattazione fatta a mano sopra).
+
+    NON riguarda le heat map di 'AHT Trend WoW': quelle hanno una lista a parte,
+    `aht_history.casetype_heatmap` in settings.yml, e un controllo a parte qui
+    sotto. Tenerle separate non e' pedanteria — sono due domande diverse ("di
+    questo case type mi interessa il dettaglio?" e "questo case type lo voglio
+    nel trend?") e si rispondono in due file diversi.
+
+    Fino al 2026-08-20 le coppie nuove venivano APPESE a 'Helper CaseType'. E'
+    stato tolto: allargava da se' una lista che e' curata a mano.
     """
-    fuori = {str(t).strip().casefold() for t in esclusi}
-    nel_trend = [(c, t) for c, t in nuovi if t.strip().casefold() not in fuori]
-    fuori_trend = [(c, t) for c, t in nuovi if t.strip().casefold() in fuori]
-
-    dettagli = [f"{c} | {t}   -> ENTRA nel trend" for c, t in nel_trend]
-    dettagli += [f"{c} | {t}   (escluso dal trend)" for c, t in fuori_trend]
-
-    hint = (
-        "Sono stati appesi in fondo a 'Helper CaseType', quindi i loro numeri\n"
-        "esistono e sono corretti. Non compaiono in 'CaseType Deepdive', che ha una\n"
-        "lista curata a mano: se uno di questi ti interessa, aggiungilo lì."
-    )
-    if nel_trend:
-        hint += (
-            "\nQuelli marcati ENTRA compaiono da questa settimana nelle heat map di\n"
-            "'AHT Trend WoW', dove prima non c'erano. Se non devono starci, aggiungili\n"
-            "a aht_history.casetype_esclusi in settings.yml e rilancia: lo storico si\n"
-            "riscrive, non si somma."
-        )
-
     rep.add(Finding(
-        check="case type nuovi",
+        check="case type non in 'Helper CaseType'",
         level=SEGNALA,
         summary=(
-            f"{len(nuovi)} combinazioni (canale, case type) non erano in "
-            f"'Helper CaseType'"
-            + (f", di cui {len(nel_trend)} entrano nel trend" if nel_trend else "")
+            f"{len(nuovi)} combinazioni (canale, case type) non sono nella lista "
+            f"di 'Helper CaseType'"
+        ),
+        details=[_riga_peso(c, t, pesi) for c, t in sorted(
+            nuovi, key=lambda ct: -((pesi or {}).get(ct, (0, 0))[0])
+        )],
+        hint=(
+            "Conseguenza: non compaiono in 'CaseType Deepdive', che mostra la lista\n"
+            "scritta a mano in quel foglio. Nient'altro cambia — le heat map di\n"
+            "'AHT Trend WoW' hanno una lista propria (vedi la segnalazione sulle\n"
+            "heat map, se c'e').\n"
+            "Se uno di questi ti interessa nel deepdive, aggiungi la coppia in fondo\n"
+            "a 'Helper CaseType' nel template."
+        ),
+    ))
+
+
+def _check_casetype_fuori_heatmap(rep, ammessi: tuple[str, ...], pesi: dict) -> None:
+    """Case type nei dati che non sono nella lista delle heat map.
+
+    Non entrano nel trend, ed e' voluto: le heat map di 'AHT Trend WoW' devono
+    restare confrontabili settimana su settimana, e `A5` mostra tutto quello che
+    trova nello storico — quindi un case type nuovo aggiungerebbe una riga con un
+    dato su dodici colonne, spostando anche l'ordinamento di tutte le altre.
+
+    Ma "non entrano" non deve voler dire "non si sanno": sono casi veri, lavorati
+    da persone vere, e restano tutti in `data/aht_history.csv`. Quindi qui si
+    dicono con VOLUME e AHT — che e' cio' che serve per decidere se sono marginali
+    davvero. Nella W33 'Call Assignment' aveva 30 casi, e 'marginale' non e' una
+    parola che si possa usare senza guardare il numero.
+    """
+    dentro = {str(c).strip().casefold() for c in ammessi}
+    # Per NOME, non per coppia: la lista delle heat map e' per nome, e dire due
+    # volte lo stesso case type (una per canale) sarebbe rumore.
+    fuori: dict[str, list[int]] = {}
+    for (_canale, ct), (vol, _aht) in pesi.items():
+        if str(ct).strip().casefold() in dentro:
+            continue
+        fuori.setdefault(ct, []).append(vol)
+    if not fuori:
+        return
+
+    totali = {ct: sum(v) for ct, v in fuori.items()}
+    dettagli = [
+        f"{ct}   {tot} casi"
+        for ct, tot in sorted(totali.items(), key=lambda kv: -kv[1])
+    ]
+    rep.add(Finding(
+        check="case type fuori dalle heat map",
+        level=SEGNALA,
+        summary=(
+            f"{len(fuori)} case type nei dati non sono in "
+            f"aht_history.casetype_heatmap — {sum(totali.values())} casi in tutto"
         ),
         details=dettagli,
-        hint=hint,
+        hint=(
+            "Non compaiono nelle heat map di 'AHT Trend WoW'. E' voluto: quelle\n"
+            "devono restare confrontabili settimana su settimana, e una riga nuova\n"
+            "con un dato su dodici colonne sposta anche l'ordinamento delle altre.\n"
+            "I dati NON sono persi: stanno tutti in data/aht_history.csv.\n"
+            "Se uno ti interessa, aggiungilo a aht_history.casetype_heatmap in\n"
+            "config/settings.yml e rilancia: comparira' con TUTTE le settimane che\n"
+            "l'archivio ha, non solo da adesso.\n"
+            "Guarda il numero di casi prima di decidere: e' il solo modo di sapere se\n"
+            "'marginale' e' vero."
+        ),
     ))
 
 
@@ -577,6 +643,134 @@ def _check_at_in_week(rep, start_times, week, offset_hours) -> None:
             level=SEGNALA,
             summary=f"{lo} .. {hi} · tutte le {dentro} righe dentro la settimana",
         ))
+
+
+# --- 2ter. la sezione Duplicate Cases --------------------------------------
+
+def _settimana_prevalente(valori: list):
+    """(anno ISO, settimana) della MODA dei giorni, piu' il primo e l'ultimo.
+
+    La moda e non il min/max, per lo stesso motivo per cui `_resolve_week` fa
+    cosi' su `AT_DATASET`: un solo caso chiuso a cavallo della mezzanotte del
+    lunedi' non deve spostare la settimana di tutto l'export.
+    """
+    from collections import Counter
+    from datetime import date as _date
+    from datetime import datetime as _dt
+
+    giorni: list[_date] = []
+    for v in valori:
+        if isinstance(v, _dt):
+            v = v.date()
+        if isinstance(v, _date):
+            giorni.append(v)
+    if not giorni:
+        return None, None, None
+    settimane = Counter(g.isocalendar()[:2] for g in giorni)
+    prevalente = settimane.most_common(1)[0][0]
+    return tuple(prevalente), min(giorni), max(giorni)
+
+
+def _check_settimana_duplicati(rep, closed: list, week_inferred) -> None:
+    """L'export duplicati copre la stessa settimana del resto del report?
+
+    Deciso il 2026-08-19: **la stessa**. Lo sfasamento W32/W33 che si vedeva nel
+    template era un artefatto del montaggio — quello della W32 era il solo export
+    disponibile in quel momento — non un processo che lavora sfasato.
+
+    Quindi BLOCCA, per la stessa ragione di `Date Viewpoint`: un report con
+    l'etichetta sbagliata viene archiviato, ed e' peggio di un report che manca.
+
+    Il perimetro si ricava dalle date dei casi (`Date/Time Closed`) e non dalle
+    righe del preambolo: il preambolo dice l'intervallo RICHIESTO al report, le
+    date dicono quello OTTENUTO, e per l'allineamento conta il secondo — se una
+    settimana non ha duplicati chiusi il lunedi', i due non coincidono.
+    """
+    settimana, primo, ultimo = _settimana_prevalente(closed)
+    if settimana is None:
+        return
+    if not week_inferred:
+        rep.add(Finding(
+            check="settimana dei duplicati",
+            level=SEGNALA,
+            summary=(
+                f"l'export duplicati copre {settimana[0]}-W{settimana[1]:02d} "
+                f"({primo.isoformat()} → {ultimo.isoformat()}), ma non so quella "
+                f"del resto del report"
+            ),
+            hint=(
+                "Senza AT_DATASET non c'e' una settimana con cui confrontarla:\n"
+                "il controllo si salta invece di inventare un confronto."
+            ),
+        ))
+        return
+    if tuple(settimana) == tuple(week_inferred):
+        return
+    rep.add(Finding(
+        check="l'export duplicati e' di un'altra settimana",
+        level=BLOCCA,
+        summary=(
+            f"duplicati {settimana[0]}-W{settimana[1]:02d}, il resto del report "
+            f"{week_inferred[0]}-W{week_inferred[1]:02d}"
+        ),
+        details=[
+            f"duplicati (Date/Time Closed): {primo.isoformat()} → {ultimo.isoformat()}",
+            f"report (dagli altri export): {week_inferred[0]}-W{week_inferred[1]:02d}",
+        ],
+        hint=(
+            "Riscarica il report duplicati con l'intervallo della settimana giusta,\n"
+            "oppure controlla di non aver lasciato in input/ il file della settimana\n"
+            "scorsa.\n"
+            "Un report che porta la sezione duplicati di un'altra settimana non ha\n"
+            "nessuna etichetta che lo dica: i tre fogli DC si leggono come se fossero\n"
+            "della settimana in copertina."
+        ),
+    ))
+
+
+def _check_capienze_duplicati(rep, capienze: dict[str, int], conteggi: dict[str, int]) -> None:
+    """Gli elenchi dei fogli DC hanno posto per quello che c'e' nei dati?
+
+    Gli elenchi sono array dinamici e crescono da se'; le colonne accanto (il
+    conteggio, la media, la percentuale) hanno una formula per riga e si fermano
+    dove sono state tirate. La voce in eccesso compare **senza nessun numero
+    accanto**: presente e invisibile insieme, senza un solo errore. E' lo stesso
+    difetto tolto a 'Helper CaseType' ad agosto.
+
+    Come per i limiti di riga, non si aspetta il superamento: si SEGNALA all'80%,
+    cosi' le formule si tirano quando c'e' tempo e non nella settimana in cui i
+    numeri sono gia' incompleti.
+    """
+    for etichetta, servono in sorted(conteggi.items()):
+        capienza = capienze.get(etichetta)
+        if not capienza or not servono:
+            continue
+        if servono > capienza:
+            rep.add(Finding(
+                check=f"posto finito per {etichetta}",
+                level=BLOCCA,
+                summary=f"{servono} da mostrare, il foglio ne tiene {capienza}",
+                hint=(
+                    f"Le {servono - capienza} voci in eccesso comparirebbero nell'elenco\n"
+                    "senza nessun numero accanto: nessun errore, solo celle vuote\n"
+                    "dove dovrebbe esserci un conteggio.\n"
+                    "Rimedio: tira le formule piu' in basso nel foglio (vedi\n"
+                    "docs/piano-duplicates.md §4.3 per le colonne esatte).\n"
+                    "La capienza viene letta dal template, quindi appena le tiri\n"
+                    "questo controllo se ne accorge da solo."
+                ),
+            ))
+        elif servono > capienza * SOGLIA_ATTENZIONE:
+            rep.add(Finding(
+                check=f"posto quasi finito per {etichetta}",
+                level=SEGNALA,
+                summary=f"{servono} su {capienza} ({servono / capienza:.0%})",
+                hint=(
+                    "Non morde ancora. Ma quando mordera' non lo dira' nessuno: le\n"
+                    "voci in eccesso resteranno nell'elenco senza numeri accanto.\n"
+                    "Conviene tirare le formule adesso, che c'e' tempo."
+                ),
+            ))
 
 
 # --- 3. insiemi di agenti --------------------------------------------------

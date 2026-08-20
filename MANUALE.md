@@ -1,6 +1,6 @@
 # Omni Report — manuale d'uso
 
-Questo programma prende i sei file che scarichi ogni settimana e produce
+Questo programma prende i sette file che scarichi ogni settimana e produce
 `Omni_Report_W<NN>.xlsm`, lo stesso workbook che prima si costruiva a mano
 incollando i dati nei fogli.
 
@@ -33,7 +33,7 @@ risposta giusta sia forzarlo.
 
 ## 1. Cosa fa, in due minuti
 
-Sei file in ingresso, un workbook in uscita.
+Sette file in ingresso, un workbook in uscita.
 
 | file (il nome può cambiare) | cosa contiene | finisce in |
 |---|---|---|
@@ -43,20 +43,53 @@ Sei file in ingresso, un workbook in uscita.
 | `PSAT DATASET W<NN>.csv` | sondaggi di soddisfazione | foglio `PSAT_DATASET` (**opzionale**: se manca, si procede lo stesso — vedi capitolo 4) |
 | `Turni ....xlsx` | roster WFM | foglio `Turni` |
 | `Back Office ....xlsx` | slot di back office | foglio `Slot Only Cases` |
+| `Leo's Orchidea Dup Cases ....xlsx` | casi chiusi come duplicato o spam | foglio `DUP_DATASET` (**opzionale**: se manca, la sezione Duplicate Cases resta vuota e il resto esce comunque) |
 
 Il programma:
 
-1. legge i sei file e **controlla che le colonne che servono ci siano**;
+1. legge i sette file e **controlla che le colonne che servono ci siano**;
 2. confronta le fonti fra loro, cercando le incoerenze che a mano non si vedono;
-3. se tutto torna, copia il template, scrive i sei fogli, ricalcola e lancia la
+3. se tutto torna, copia il template, scrive i sette fogli, ricalcola e lancia la
    macro che genera `Dettaglio Malpractice`;
 4. salva in `output\Omni_Report_W<NN>.xlsm`.
 
-Oltre ai sei fogli scrive anche il **trend settimana-su-settimana**: aggiorna
+Oltre ai sette fogli scrive anche il **trend settimana-su-settimana**: aggiorna
 `data\aht_history.csv` — la memoria di volume e AHT per tipo di caso — e ne
 riversa una copia nel foglio `AHT History`, da cui `AHT Trend WoW` e
 `CaseType Deepdive` si ricalcolano da soli. Vedi il Passo 5 del capitolo 3:
 quel file va salvato nel repository dopo ogni giro.
+
+### La sezione Duplicate Cases
+
+`DUP_DATASET` è l'export dei casi chiusi come duplicato o spam, e alimenta tre
+fogli che si ricalcolano da soli: `DC Dashboard` (i grafici), `DC Agents &
+Categories` e `DC Timing & Quality` (le tabelle di dettaglio). In mezzo c'è
+`Duplicates Helper`, che rimette in forma i dati grezzi.
+
+Tre cose da sapere, perché sono diverse da tutto il resto:
+
+- **L'export si incolla così com'è.** È il report Salesforce *formattato*: porta
+  il titolo, la riga `As of ...`, l'elenco dei filtri, e in fondo due righe di
+  totali. Il programma riconosce da sé dov'è la riga delle intestazioni, scarta i
+  totali (e ti dice quante righe ha scartato) e **riscrive le righe di
+  intestazione del report** con quelle del download — così il foglio dichiara
+  sempre il periodo di questa settimana, non quello del template.
+- **Deve essere la settimana giusta.** Il report va scaricato con
+  `Date/Time Closed` nell'intervallo della settimana che stai chiudendo. Se
+  scarichi un'altra settimana il programma **blocca**, e ti stampa i due periodi
+  perché tu sappia quale file riscaricare. Una sezione duplicati di un'altra
+  settimana dentro il report non ha nessuna etichetta che lo dica.
+- **Se il file manca, si procede.** Come per i sondaggi: il preflight lo segnala,
+  i tre fogli DC restano vuoti per quella settimana, e il resto dell'Omni Report
+  esce normalmente. Quei fogli mostreranno `#DIV/0!` — è voluto, e il programma
+  te lo dice in chiaro invece di far sembrare fallito il giro.
+
+Gli elenchi dei fogli DC hanno un numero massimo di righe (34 agenti, 26 tipi di
+caso, 12 record type). Il programma conta quanti ce ne sono nei dati e **ti avvisa
+all'80%**, prima che il posto finisca: la voce in eccesso comparirebbe
+nell'elenco senza nessun numero accanto, senza alcun errore. Quando l'avviso
+arriva, le formule vanno tirate più in basso — le colonne esatte sono in
+`docs/piano-duplicates.md` §4.3.
 
 Le due cose che rendono il programma più affidabile del copia-incolla:
 
@@ -119,7 +152,7 @@ nessuno può chiudere. Le istruzioni sono nel messaggio.
 
 ## 3. Il giro settimanale
 
-### Passo 1 — Metti i sei file in `input\`
+### Passo 1 — Metti i sette file in `input\`
 
 **Non rinominarli.** I nomi si riconoscono per schema, quindi
 `AT DATASET W31.xlsx` va bene com'è. Nemmeno il formato va dichiarato: `.csv` e
@@ -234,7 +267,7 @@ Per registrarla:
    `run_report.bat` in questa cartella. Argomenti: `auto`.
 4. Salva.
 
-**Attenzione**: l'attività genera il report solo se i sei file sono già in
+**Attenzione**: l'attività genera il report solo se i sette file sono già in
 `input\` per quella settimana — non li scarica lei. Se mancano, il preflight
 blocca come sempre e non produce niente: non è un problema, ma nemmeno un
 sostituto dello scaricare i file. Controlla comunque `output\preflight_W<NN>.txt`
@@ -397,22 +430,41 @@ settimana: devono essere tutte.
 Un giorno presente in una fonte e non nell'altra. Con un export parziale è il
 primo sintomo.
 
-### `case type nuovi`
+### `case type non in 'Helper CaseType'`
 Nell'export ci sono combinazioni (canale, tipo di caso) che il foglio
-`Helper CaseType` non elencava. Vengono **aggiunte automaticamente** in fondo a
-quel foglio, quindi i loro numeri esistono e sono corretti.
+`Helper CaseType` non elenca. **Conseguenza: non compaiono in
+`CaseType Deepdive`**, che mostra la lista scritta a mano in quel foglio (e ci
+punta per posizione, con la formattazione fatta a mano sopra).
 
-L'elenco li divide in due, e solo il primo gruppo richiede una decisione:
+Nient'altro cambia. In particolare **non** riguarda le heat map: quelle hanno
+una lista propria, vedi la voce qui sotto.
 
-- **`-> ENTRA nel trend`**: da questa settimana compaiono nelle heat map di
-  `AHT Trend WoW`, dove prima non c'erano. Il grafico cambia forma. Se non
-  devono starci, aggiungili a `aht_history.casetype_esclusi` in
-  `config\settings.yml` e rilancia — lo storico si riscrive, non si somma.
-- **`(escluso dal trend)`**: sono già nella lista delle esclusioni. Nessuna
-  azione: restano nei dati grezzi e nell'helper, fuori dalle heat map.
+Se uno di questi ti interessa nel deepdive, aggiungi la coppia (canale, tipo di
+caso) in fondo a `Helper CaseType` nel template.
 
-In nessuno dei due casi compaiono in `CaseType Deepdive`, che mostra una lista
-scelta a mano: se uno ti interessa, va aggiunto lì.
+### `case type fuori dalle heat map`
+Nell'export ci sono tipi di caso che non sono in
+`aht_history.casetype_heatmap` (`config\settings.yml`), quindi **non compaiono
+nelle heat map di `AHT Trend WoW`**.
+
+È voluto, ed è la cosa che le rende leggibili: quel foglio non ha un elenco di
+tipi di caso scritto da qualche parte — `A5` mostra *tutto quello che trova nello
+storico*, ordinato per volume. Quindi basterebbe un tipo di caso mai visto prima
+perché comparisse una riga nuova, con **un solo dato su dodici colonne** (prima
+non esisteva), e perché l'ordinamento spostasse anche tutte le altre righe.
+Successo nella W33 con `Live Site Property Settings Issue` e `Collections`, un
+caso ciascuno.
+
+La segnalazione porta **quanti casi** ha ciascun tipo, dal più grosso al più
+piccolo. Serve: «marginale» non è una parola che si possa usare senza guardare il
+numero — nella W33 `Call Assignment` aveva 30 casi.
+
+**I dati non sono persi.** `data\aht_history.csv` conserva *tutto*, anche i tipi
+di caso fuori lista: è l'archivio, ed è l'unica cosa del progetto che non si
+ricostruisce. Il filtro agisce solo su cosa si *vede*.
+
+Quindi se un giorno uno di questi ti interessa, aggiungilo alla lista e rilancia:
+comparirà con **tutte** le settimane che l'archivio ha, non solo da quel momento.
 
 ### `date ambigue in <fonte>!<colonna>`
 Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un
@@ -657,7 +709,7 @@ Tutto quello che sta in `config\`. Sono file di testo: aprili con Notepad.
 | `sources.roster_sheet` | quale foglio leggere nel file dei turni (`publish`) |
 | `sources.backoffice_sheet` | quale foglio nel back office (`Only Cases Shifts`) |
 | `paths.aht_history` | dove sta lo storico del trend (`data/aht_history.csv`) |
-| `aht_history.casetype_esclusi` | i tipi di caso che **non** entrano nelle heat map (restano nei dati grezzi e nell'helper) |
+| `aht_history.casetype_heatmap` | i tipi di caso che si **vedono** nelle heat map di `AHT Trend WoW`. Sono i 27 del file legacy. Aggiungerne uno lo fa comparire con tutte le settimane che `data\aht_history.csv` ha; togliere una riga lo nasconde senza perdere niente |
 | `output.workbook_name` | come si chiama il file prodotto |
 | `validation.max_uncoercible_ratio` | quanti valori illeggibili tollerare per colonna (0.02 = 2%) |
 | `excel.visible` | mostrare sempre Excel |

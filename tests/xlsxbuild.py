@@ -15,6 +15,7 @@ Se un test passa solo con uno dei due, il lettore ha un buco.
 from __future__ import annotations
 
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from fasterreports.core.xlsxsource import col_to_index
@@ -33,11 +34,60 @@ _WS_TYPE = (
 _WS_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
 
 
+class VuotaFormattata:
+    """Una cella con un formato e NESSUN valore: `<c r="A1" s="1"/>`.
+
+    Excel la scrive **auto-chiusa**, ed e' la forma su cui i lettori a regex si
+    rompono: un pattern che pretende `>...</c>` non chiude il match sulla cella
+    vuota e si mangia il valore di quella dopo. Non e' un caso di laboratorio —
+    la riga 14 di `DUP_DATASET` ha A e C esattamente cosi'.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover — solo per i messaggi di test
+        return "VUOTA_FORMATTATA"
+
+
+VUOTA_FORMATTATA = VuotaFormattata()
+
+
+@dataclass(frozen=True)
+class Condivisa:
+    """Una cella con una formula CONDIVISA (`<f t="shared" .../>`).
+
+    La prima del gruppo porta il testo della formula e l'intervallo (`ref`); le
+    altre hanno solo `si`, e il tag e' **auto-chiuso**. Nel template
+    `Duplicates Helper` ne ha 6993: un lettore che le tratta come tag di apertura
+    incolla insieme il testo di celle diverse.
+    """
+
+    si: int
+    formula: str | None = None  # solo la prima del gruppo
+    ref: str | None = None  # solo la prima del gruppo, es. "M2:M100"
+    valore: object = None
+
+
 def esc(s: object) -> str:
+    """Per il valore di un ATTRIBUTO: le virgolette vanno escapate."""
     return (
         str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def esc_testo(s: object) -> str:
+    """Per il contenuto di un NODO DI TESTO (`<f>`, `<t>`, `<v>`).
+
+    Le virgolette NON si escapano, ed e' importante che questo builder faccia
+    come Excel: in un XML e' lecito scrivere `&quot;` anche in un nodo di testo,
+    ma Excel scrive `"`. Un lettore che cerca `&quot;` dentro il testo di una
+    formula (`IF($K2=&quot;&quot;,...)`) passerebbe i test e fallirebbe sul file
+    vero — ed e' esattamente come e' andata scrivendo
+    `tools/patch_template_duplicates.py`: il regex cercava `&quot;` e rifiutava
+    tutte e 34 le formule del template.
+    """
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
@@ -46,18 +96,27 @@ def _sheet_xml(grid: dict[str, object], shared: list[str] | None) -> str:
     for ref, val in grid.items():
         col = "".join(c for c in ref if c.isalpha())
         num = int("".join(c for c in ref if c.isdigit()))
-        if isinstance(val, str) and val.startswith("="):
+        if isinstance(val, VuotaFormattata):
+            cell = f'<c r="{ref}" s="1"/>'
+        elif isinstance(val, Condivisa):
+            if val.formula is not None:
+                f = f'<f t="shared" ref="{val.ref}" si="{val.si}">{esc_testo(val.formula)}</f>'
+            else:
+                f = f'<f t="shared" si="{val.si}"/>'
+            v = "" if val.valore is None else f"<v>{esc_testo(val.valore)}</v>"
+            cell = f'<c r="{ref}">{f}{v}</c>'
+        elif isinstance(val, str) and val.startswith("="):
             # Una FORMULA, non testo: va in <f>, che e' dove la cercano gli
             # strumenti che analizzano il workbook. Scritta come testo, un test
             # sui riferimenti nelle formule sarebbe verde su un file che non ne
             # contiene nessuna.
-            cell = f'<c r="{ref}"><f>{esc(val[1:])}</f></c>'
+            cell = f'<c r="{ref}"><f>{esc_testo(val[1:])}</f></c>'
         elif isinstance(val, bool):
             cell = f'<c r="{ref}" t="b"><v>{int(val)}</v></c>'
         elif isinstance(val, (int, float)):
             cell = f'<c r="{ref}"><v>{val}</v></c>'
         elif shared is None:
-            cell = f'<c r="{ref}" t="inlineStr"><is><t>{esc(val)}</t></is></c>'
+            cell = f'<c r="{ref}" t="inlineStr"><is><t>{esc_testo(val)}</t></is></c>'
         else:
             testo = str(val)
             if testo not in shared:
@@ -127,7 +186,7 @@ def make_workbook(
         for nome, xml in parti:
             z.writestr(nome, xml)
         if shared is not None:
-            si = "".join(f"<si><t>{esc(s)}</t></si>" for s in shared)
+            si = "".join(f"<si><t>{esc_testo(s)}</t></si>" for s in shared)
             z.writestr(
                 "xl/sharedStrings.xml",
                 '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/'

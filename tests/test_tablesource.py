@@ -309,3 +309,101 @@ def test_espone_la_stessa_interfaccia_di_csvsource(tmp_path):
         assert hasattr(csv, attr), attr
     assert tab.headers == csv.headers
     assert list(tab.rows()) == list(csv.rows())
+
+
+# ---------------------------------------------------------------------------
+# Il report Salesforce formattato: preambolo, intestazioni in riga 14, totali
+# ---------------------------------------------------------------------------
+
+# Il preambolo vero di 'Leo's Orchidea Dup Cases (date interval)', misurato sul
+# paste in DUP_DATASET. Una cella per riga, in colonna B: e' quello che rende
+# l'euristica della LARGHEZZA capace di distinguerlo dalle intestazioni.
+_PREAMBOLO = {
+    "B2": "Leo's Orchidea Dup Cases (date interval)",
+    "B3": "As of 2026-08-13 12:41:48 Central European Time/CET",
+    "B6": "Filtered By",
+    "B7": "Show: All users",
+    "B8": "Manager: Full Name equals Emilie McKenzie",
+    "B9": "Office Location equals Milan",
+    "B10": "Status equals Closed - Duplicate Case,Closed - Spam",
+    "B11": "Date/Time Closed greater or equal 8/3/2026",
+    "B12": "Date/Time Closed less or equal 8/9/2026 11:30 PM",
+}
+_INTESTAZIONI = {
+    "B14": "Full Name", "D14": "Case Number", "E14": "Parent Case: Case Number",
+    "F14": "Status", "G14": "Case Origin", "H14": "Date/Time Opened",
+    "I14": "Date/Time Closed", "J14": "Case Age (days)", "K14": "Case Record Type",
+    "L14": "Type", "M14": "Primary Category", "N14": "Language: Language Name",
+    "O14": "Email", "P14": "Last Modified By: Full Name", "Q14": "Comments/Remarks",
+}
+
+
+def _dup_export(tmp_path, righe: int = 2, coda: bool = True):
+    """Un export duplicati sintetico, nella forma reale."""
+    grid: dict[str, object] = {**_PREAMBOLO, **_INTESTAZIONI}
+    for i in range(righe):
+        r = 15 + i
+        grid[f"B{r}"] = f"Agente {i}"
+        grid[f"D{r}"] = f"1563776{i:02d}"
+        grid[f"E{r}"] = f"1563653{i:02d}"
+        grid[f"F{r}"] = "Closed - Duplicate Case"
+        grid[f"G{r}"] = "Phone"
+        grid[f"H{r}"] = "8/4/2026 3:59 PM"
+        grid[f"I{r}"] = "8/4/2026 4:24 PM"
+        grid[f"J{r}"] = 0.02
+        grid[f"K{r}"] = "Technical"
+        grid[f"L{r}"] = "Booking Information"
+        grid[f"N{r}"] = "Italian"
+        grid[f"O{r}"] = f"agente{i}@example.com"
+    if coda:
+        fine = 15 + righe
+        grid[f"B{fine}"] = "Total"
+        grid[f"C{fine}"] = "Sum"
+        grid[f"J{fine}"] = 72.13
+        grid[f"C{fine + 1}"] = "Count"
+        grid[f"D{fine + 1}"] = righe
+    return make_xlsx(tmp_path / "dup.xlsx", "SF_DOWNLOAD", grid, inline=False)
+
+
+def test_trova_le_intestazioni_in_riga_14_sotto_il_preambolo(tmp_path):
+    """Il limite di scansione era 10, e le intestazioni sono in 14.
+
+    Su un file perfettamente valido il lettore rispondeva «nessuna riga di
+    intestazione riconoscibile». L'euristica invece funziona benissimo: le righe
+    di preambolo hanno UNA cella, la 14 ne ha quindici.
+    """
+    src = read_table(_dup_export(tmp_path))
+    assert src.header_row == 14
+    assert src.headers[0] == "Full Name"
+    # La colonna C non ha intestazione ma resta nel blocco: il matcher lavora per
+    # nome, quindi una colonna senza nome semplicemente non si aggancia.
+    assert src.headers[1] == ""
+    assert src.headers[-1] == "Comments/Remarks"
+
+
+def test_il_preambolo_viene_restituito_riga_per_riga(tmp_path):
+    """Serve al writer: e' la sola cosa che dice quale intervallo e' stato
+    chiesto al report."""
+    src = read_table(_dup_export(tmp_path))
+    assert len(src.preamble) == 13
+    # `preamble[i]` e' la riga i+1 del file. Righe vuote comprese, alla loro
+    # posizione: e' un blocco di testo da ricopiare, non una tabella da ripulire,
+    # e saltare una riga vuota farebbe scalare di uno tutte quelle sotto.
+    assert src.preamble[0] == [None] * len(src.headers)  # riga 1, vuota
+    assert src.preamble[1][0] == "Leo's Orchidea Dup Cases (date interval)"  # riga 2
+    assert src.preamble[3] == [None] * len(src.headers)  # riga 4, vuota
+    assert src.preamble[5][0] == "Filtered By"  # riga 6
+    assert src.preamble[10][0].startswith("Date/Time Closed greater")  # riga 11
+    assert src.preamble[12] == [None] * len(src.headers)  # riga 13, vuota
+
+
+def test_le_righe_di_totale_sono_dati_per_il_lettore(tmp_path):
+    """Il lettore non le distingue, e non deve: le scarta il contratto.
+
+    `read_table` scarta solo le righe COMPLETAMENTE vuote. `Total | Sum | 72,13`
+    non lo e', quindi arriva a valle — dove `key_field`/`stop_values` sanno cosa
+    farne. Tenere la regola nel contratto e non nel lettore vuol dire che un
+    export senza coda non ha bisogno di configurazione diversa.
+    """
+    src = read_table(_dup_export(tmp_path, righe=2))
+    assert len(src.data) == 4  # 2 record + Total + Count

@@ -34,6 +34,21 @@ from .errors import SourceError
 # `PSAT_DATASET` e `Turni` di `Helper Turni`.
 _RANGE = r"(?<![A-Za-z0-9_ ])'?{}'?!\$?[A-Z]{{1,3}}\$?(\d+):\$?[A-Z]{{1,3}}\$?(\d+)"
 _REF = r"(?<![A-Za-z0-9_ ])'?{}'?!(\$?[A-Z]{{1,3}}\$?\d+:\$?[A-Z]{{1,3}}\$?\d+)"
+# Un riferimento a UNA cella: `DUP_DATASET!B15`. Serve solo ai dataset letti
+# cella per cella — vedi `scan_cell_refs`.
+_CELL_REF = r"(?<![A-Za-z0-9_ ])'?{}'?!\$?([A-Z]{{1,3}})\$?(\d+)(?![\d:])"
+
+# Una formula nell'XML: `<f>SUM(A1:A9)</f>`, ma anche `<f t="shared" si="6"/>`,
+# che nel corpo non ha testo. Un pattern `<f[^>]*>(.*?)</f>` considera la forma
+# auto-chiusa un tag di APERTURA — il `[^>]*` si mangia anche lo slash — e
+# cattura tutto fino al `</f>` successivo, incollando insieme il testo di celle
+# diverse. Nel template ci sono 6993 formule condivise.
+_FORMULA = re.compile(r"<f(?:[^>\"]|\"[^\"]*\")*?(?:/>|>(.*?)</f>)", re.S)
+
+
+def _formule(raw: str) -> list[str]:
+    """Il testo delle formule di un foglio, senza le condivise vuote."""
+    return [_unescape(f) for f in _FORMULA.findall(raw) if f]
 
 
 @dataclass(frozen=True)
@@ -73,8 +88,7 @@ def scan_row_limits(path: str | Path, datasets: tuple[str, ...]) -> list[RowLimi
                 raw = z.read(target).decode("utf8", "replace")
             except KeyError:
                 continue
-            for formula in re.findall(r"<f[^>]*>(.*?)</f>", raw, re.S):
-                f = _unescape(formula)
+            for f in _formule(raw):
                 for ds in datasets:
                     for m in re.finditer(_RANGE.format(re.escape(ds)), f):
                         fine = max(int(m.group(1)), int(m.group(2)))
@@ -88,6 +102,115 @@ def scan_row_limits(path: str | Path, datasets: tuple[str, ...]) -> list[RowLimi
                             RowLimit(dataset=ds, max_row=fine, sheet=nome, ref=ref)
                         )
     return sorted(out, key=lambda l: (l.dataset, l.max_row, l.sheet, l.ref))
+
+
+def scan_cell_refs(path: str | Path, datasets: tuple[str, ...]) -> list[RowLimit]:
+    """Il limite dei dataset letti **cella per cella**, non per intervalli.
+
+    `Duplicates Helper!A2` e' `IF(OR(DUP_DATASET!B15="",...),"",DUP_DATASET!B15)`,
+    `A3` punta a `B16`, e cosi' via fino a `A1001` -> `B1014`. Non c'e' nessun
+    intervallo da trovare: c'e' una griglia di 13 120 riferimenti puntuali, e la
+    riga piu' alta fra quelli **e' il limite** — la riga 1015 di `DUP_DATASET`
+    non la leggerebbe nessuno.
+
+    PERCHE' SOLO PER I DATASET CHE LO DICHIARANO (`read_by_row` nel contratto), e
+    non per tutti: `Recap PSAT Positive` punta alla riga **fissa** `PSAT_DATASET!DQ130`
+    — l'"elogio della settimana", scelto a mano. Una scansione indiscriminata
+    leggerebbe quel 130 come il limite di `PSAT_DATASET` e **bloccherebbe** ogni
+    settimana con piu' di 130 risposte al sondaggio: un guasto inventato dal
+    controllo, che e' il peggior tipo.
+
+    Restituisce un `RowLimit` per (foglio, dataset, colonna) — la stessa forma di
+    `scan_row_limits`, cosi' `_check_row_limits` non ha bisogno di sapere da quale
+    delle due scansioni arriva il numero.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise SourceError(f"Template non trovato: {path}")
+    if not datasets:
+        return []
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SourceError(f"{path.name}: non e' un file .xlsm/.xlsx valido.") from None
+
+    # (foglio, dataset, colonna) -> riga massima
+    massimi: dict[tuple[str, str, str], int] = {}
+    with z:
+        for nome, target in _sheet_targets(z, path).items():
+            try:
+                raw = z.read(target).decode("utf8", "replace")
+            except KeyError:
+                continue
+            for f in _formule(raw):
+                for ds in datasets:
+                    if ds not in f:  # taglia corto: il 99% delle formule non lo cita
+                        continue
+                    for m in re.finditer(_CELL_REF.format(re.escape(ds)), f):
+                        col, riga = m.group(1), int(m.group(2))
+                        chiave = (nome, ds, col)
+                        if riga > massimi.get(chiave, 0):
+                            massimi[chiave] = riga
+
+    out = [
+        RowLimit(dataset=ds, max_row=riga, sheet=nome, ref=f"{col}{riga} (cella per cella)")
+        for (nome, ds, col), riga in massimi.items()
+    ]
+    return sorted(out, key=lambda l: (l.dataset, l.max_row, l.sheet, l.ref))
+
+
+def scan_formula_extent(
+    path: str | Path, punti: tuple[tuple[str, str, int], ...]
+) -> dict[tuple[str, str], int]:
+    """Fin dove arrivano le formule di una colonna: `(foglio, colonna) -> riga`.
+
+    Serve ai fogli che presentano un elenco con **una formula per riga**: l'elenco
+    dei nomi e' un array dinamico e cresce da se', ma le colonne accanto (il
+    conteggio, la media, la percentuale) hanno una formula scritta riga per riga e
+    si fermano dove le ha tirate chi ha fatto il foglio. La voce in eccesso
+    compare nell'elenco **senza nessun numero accanto**: presente e invisibile
+    insieme, senza un solo errore. E' lo stesso difetto tolto a 'Helper CaseType'.
+
+    `punti` sono `(foglio, colonna, prima riga)`; si restituisce l'ultima riga
+    >= `prima riga` che in quella colonna ha una formula.
+
+    La misura si legge dal TEMPLATE e non si scrive nel codice: se domani le
+    formule vengono tirate piu' in basso, il controllo lo segue da solo — lo
+    stesso principio dei formati numerici di 'AHT History'.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise SourceError(f"Template non trovato: {path}")
+    try:
+        z = zipfile.ZipFile(path)
+    except zipfile.BadZipFile:
+        raise SourceError(f"{path.name}: non e' un file .xlsm/.xlsx valido.") from None
+
+    volute: dict[str, list[tuple[str, int]]] = {}
+    for foglio, col, prima in punti:
+        volute.setdefault(foglio, []).append((col, prima))
+
+    out: dict[tuple[str, str], int] = {}
+    with z:
+        fogli = _sheet_targets(z, path)
+        for foglio, colonne in volute.items():
+            target = fogli.get(foglio)
+            if target is None:
+                continue
+            try:
+                raw = z.read(target).decode("utf8", "replace")
+            except KeyError:
+                continue
+            for col, prima in colonne:
+                # Una cella con formula: `<c r="B40" ...><f ...` — anche quando la
+                # formula e' condivisa e il tag e' auto-chiuso, il `<f` c'e'.
+                pat = re.compile(rf'<c r="{col}(\d+)"[^>]*>\s*<f[^>]*[>/]')
+                righe = [
+                    int(m.group(1)) for m in pat.finditer(raw) if int(m.group(1)) >= prima
+                ]
+                if righe:
+                    out[(foglio, col)] = max(righe)
+    return out
 
 
 @dataclass(frozen=True)

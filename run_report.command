@@ -21,10 +21,10 @@ if [ -z "$WEEK" ]; then
 fi
 
 echo
-echo "=== Controllo dei CSV in input/ ==="
+echo "=== Controllo delle fonti in input/ ==="
 if ! python3 -m fasterreports.omni.cli preflight --week "$WEEK"; then
     echo
-    echo "I CSV non sono a posto: vedi i punti BLOCCATO qui sopra."
+    echo "Le fonti non sono a posto: vedi i punti BLOCCATO qui sopra."
     echo "Nessun workbook e' stato prodotto."
     read -r -p "Premi Invio per chiudere."
     exit 1

@@ -81,34 +81,45 @@ def test_fonti_assenti_elencate_tutte(contratto, cfg):
     Prima il ramo che scriveva l'errore chiamava di nuovo `input_path`, che
     solleva proprio perche' il file non c'e': il preflight moriva mentre
     descriveva il guasto, e chi lanciava vedeva una fonte sola invece di sapere
-    quali delle sei mancavano.
+    quali mancavano.
 
-    `PSAT_DATASET` e' l'eccezione dichiarata: e' `optional`, quindi la sua riga
-    e' SALTATA (non BLOCCATA) e il resto del report procede lo stesso attorno
-    a lei — vedi i test dedicati piu' sotto per il perche'.
+    Le fonti `optional` sono l'eccezione dichiarata (`PSAT_DATASET`,
+    `DUP_DATASET`): la loro riga e' SALTATA (non BLOCCATA) e il resto del report
+    procede lo stesso attorno a loro — vedi i test dedicati piu' sotto per il
+    perche'. Per ognuna resta un blocco VUOTO, che e' cio' che fa PULIRE il
+    foglio: un residuo della settimana prima sarebbe un report sbagliato, non uno
+    che manca.
     """
     report, blocks = run_preflight(contratto, cfg, week_number=31)
     assert len(report.datasets) == len(contratto.datasets)
-    assert not report.ok  # le CINQUE fonti obbligatorie mancano comunque
-    assert list(blocks) == ["PSAT_DATASET"]  # solo il blocco vuoto dell'opzionale
+    assert not report.ok  # le fonti obbligatorie mancano comunque
+    opzionali = {n for n, d in contratto.datasets.items() if d.optional}
+    assert set(blocks) == opzionali, "solo i blocchi vuoti delle opzionali"
     for d in report.datasets:
-        if d.name == "PSAT_DATASET":
+        if d.name in opzionali:
             assert not d.error and d.skipped_reason
         else:
             assert d.error, d.name
         assert "nessun file corrispondente" in d.source
 
 
-def test_una_fonte_su_sei_non_impedisce_di_leggerla(contratto, cfg):
+def test_una_fonte_sola_non_impedisce_di_leggerla(contratto, cfg):
     scrivi_at_csv(cfg, [riga_at("2026-07-28 12:00:00")])
     report, blocks = run_preflight(contratto, cfg, week_number=31)
     assert _ds(report, "AT_DATASET").ok
     assert "AT_DATASET" in blocks
-    # PSAT (opzionale) e' saltata, non bloccata: restano bloccate le altre
-    # quattro fonti obbligatorie (ATwi, SF, Turni, Slot Only Cases).
-    assert sum(1 for d in report.datasets if d.error) == len(contratto.datasets) - 2
-    assert _ds(report, "PSAT_DATASET").skipped_reason
-    assert not _ds(report, "PSAT_DATASET").error
+    # Le fonti OPZIONALI assenti sono saltate, non bloccate. Restano bloccate le
+    # obbligatorie che mancano — cioe' tutte tranne AT_DATASET, che c'e'.
+    # Il numero viene dal contratto: scriverlo a mano vorrebbe dire aggiornarlo a
+    # ogni dataset nuovo, e nel frattempo il test misurerebbe la cosa sbagliata.
+    obbligatorie_mancanti = sum(
+        1 for d in contratto.datasets.values() if not d.optional and d.name != "AT_DATASET"
+    )
+    assert sum(1 for d in report.datasets if d.error) == obbligatorie_mancanti
+    for nome, ds in contratto.datasets.items():
+        if ds.optional:
+            assert _ds(report, nome).skipped_reason, f"{nome} doveva essere saltata"
+            assert not _ds(report, nome).error
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +313,7 @@ def test_build_parziale_senza_workbook_esistente_si_rifiuta(contratto, cfg):
 
     I fogli non ricaricati sarebbero rimasti pieni dei dati della settimana del
     template — un report mezzo W31 e mezzo W30, senza che nulla lo dicesse. E il
-    ciclo di scrittura cercava i blocchi di tutti e sei i dataset, quindi
+    ciclo di scrittura cercava i blocchi di tutti i dataset, quindi
     andava in KeyError proprio nel caso per cui `--only` esiste.
     """
     from fasterreports.core.errors import PipelineError

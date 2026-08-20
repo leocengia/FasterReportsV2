@@ -41,7 +41,71 @@ DEFAULT_DATASETS = [
     "PSAT_DATASET",
     "Turni",
     "Slot Only Cases",
+    # Entrato il 2026-08-19 con la sezione Duplicate Cases. E' il primo dataset
+    # con le intestazioni non in riga 1: la riga la dice il contratto, vedi
+    # `header_rows`.
+    "DUP_DATASET",
 ]
+
+# Percorso del contratto rispetto alla radice del repo. Da qui si legge in che
+# riga stanno le intestazioni di ciascun foglio dati, invece di riscriverlo:
+# `header_row` e' gia' dichiarato nel contratto, ed e' quello che la pipeline
+# usa per scrivere. Due numeri che possono divergere sarebbero il difetto che
+# questo file serve a scoprire.
+CONTRATTO = Path(__file__).resolve().parents[1] / "config" / "columns.yml"
+
+
+def header_rows(contratto: Path = CONTRATTO) -> dict[str, int]:
+    """`{nome foglio: riga delle intestazioni}` dal contratto.
+
+    Best-effort: questo file e' uno strumento diagnostico e deve funzionare anche
+    su un workbook di cui non si ha il contratto (o con un contratto rotto —
+    magari e' proprio quello che si sta cercando). Se non si riesce a leggerlo, si
+    assume riga 1 per tutti, che e' il caso di cinque dataset su sette.
+    """
+    try:
+        import yaml
+
+        body = yaml.safe_load(contratto.read_text(encoding="utf-8")) or {}
+        return {
+            str(d.get("sheet", nome)): int(d.get("header_row", 1))
+            for nome, d in (body.get("datasets") or {}).items()
+            if isinstance(d, dict)
+        }
+    except Exception:
+        return {}
+
+
+# Una cella del foglio: `<c r="B14" s="410" t="s"><v>9</v></c>` — ma anche
+# `<c r="A14" s="396"/>`, cioe' formattata e VUOTA.
+#
+# Il ramo `/>` non e' una rifinitura. Con un pattern che pretende
+# `>...</c>`, una cella auto-chiusa non chiude il match: questo prosegue fino al
+# primo `</c>` che trova, cioe' **si mangia il valore della cella successiva** e
+# lo attribuisce a quella vuota. Finora non si vedeva perche' tutti i fogli dati
+# avevano le intestazioni in riga 1 a partire da A senza buchi. La riga 14 di
+# `DUP_DATASET` ha A e C vuote-ma-formattate, e il risultato misurato era
+# `A: '9136'`, `C: '1364'` (indici grezzi di sharedStrings) con `Full Name` e
+# `Case Number` **spariti** dalla fixture.
+#
+# `(?:[^>"]|"[^"]*")*?` invece di `[^>]*`: gli attributi possono contenere `>`
+# dentro le virgolette.
+_CELL = re.compile(
+    r'<c r="([A-Z]+)(\d+)"((?:[^>"]|"[^"]*")*?)(?:/>|>(.*?)</c>)', re.S
+)
+
+# Una formula: `<f>SUM(A1:A9)</f>`, ma anche `<f t="shared" si="6"/>` — le
+# formule condivise, che nel corpo non hanno testo. Stesso difetto del pattern
+# delle celle: `<f[^>]*>` considera `<f t="shared" si="6"/>` un tag di
+# APERTURA (il `[^>]*` si mangia anche lo slash), e cattura tutto fino al
+# `</f>` successivo — incollando insieme il testo di celle diverse. In questo
+# workbook le formule condivise sono 6993.
+_FORMULA = re.compile(r"<f(?:[^>\"]|\"[^\"]*\")*?(?:/>|>(.*?)</f>)", re.S)
+
+
+def formule(raw: str) -> list[str]:
+    """Il testo di tutte le formule di un foglio, senza le condivise vuote."""
+    return [_unescape(f) for f in _FORMULA.findall(raw) if f]
 
 
 def col_index(letters: str) -> int:
@@ -77,9 +141,14 @@ class Workbook:
             target = relmap.get(rid.group(1), "").lstrip("/")
             if target and not target.startswith("xl/"):
                 target = "xl/" + target
-            self.sheets[name.group(1)] = target
+            # I nomi vanno de-escapati: nel workbook.xml il foglio si chiama
+            # `DC Agents &amp; Categories`, non `DC Agents & Categories`.
+            # `templatescan._sheet_targets` lo faceva gia'; qui no, e lo stesso
+            # foglio risultava con due nomi diversi a seconda di chi lo leggeva.
+            nome = _unescape(name.group(1))
+            self.sheets[nome] = target
             if 'state="hidden"' in attrs or 'state="veryHidden"' in attrs:
-                self.hidden.add(name.group(1))
+                self.hidden.add(nome)
         self._shared: list[str] | None = None
 
     @property
@@ -101,15 +170,41 @@ class Workbook:
         m = re.search(r'<dimension ref="([^"]+)"', self.xml(sheet))
         return m.group(1) if m else "?"
 
+    def last_data_row(self, sheet: str) -> int:
+        """L'ultima riga che contiene davvero un valore o una formula.
+
+        Non `<dimension>`: quell'attributo e' un promemoria che Excel scrive e
+        non sempre restringe. In `SF_DATABASE` dice `A1:EM3568` mentre l'ultima
+        riga con un valore e' la 3389 — e il confronto con l'intervallo della
+        tabella `AHT_Data` (`A1:EM3389`) stampava un ATTENZIONE per 179 righe di
+        dati che non esistono. Un falso allarme in uno strumento che serve a
+        trovare quelli veri e' peggio di nessun allarme.
+        """
+        raw = self.xml(sheet)
+        ultima = 0
+        for m in re.finditer(r'<row r="(\d+)"', raw):
+            riga = int(m.group(1))
+            if riga <= ultima:
+                continue
+            fine = raw.find("</row>", m.end())
+            corpo = raw[m.end() : fine if fine != -1 else None]
+            if "<v>" in corpo or "<is>" in corpo or "<f" in corpo:
+                ultima = riga
+        return ultima
+
     def header_row(self, sheet: str, row: int = 1) -> dict[str, str]:
+        """Le intestazioni di una riga: `{lettera colonna: testo}`.
+
+        `row` non e' sempre 1. `DUP_DATASET` e' il report Salesforce formattato
+        incollato tale e quale, e le sue intestazioni stanno in riga 14, sotto
+        titolo, `As of ...` e il blocco `Filtered By`.
+        """
         raw = self.xml(sheet)
         m = re.search(rf'<row r="{row}"[^>]*>(.*?)</row>', raw, re.S)
         if not m:
             return {}
         out: dict[str, str] = {}
-        for ref, attrs, body in re.findall(
-            r'<c r="([A-Z]+\d+)"([^>]*)>(.*?)</c>', m.group(1), re.S
-        ):
+        for col, _rownum, attrs, body in _CELL.findall(m.group(1)):
             t = re.search(r't="([^"]+)"', attrs)
             v = re.search(r"<v>(.*?)</v>", body, re.S)
             inline = re.search(r"<is>.*?<t[^>]*>(.*?)</t>", body, re.S)
@@ -121,7 +216,7 @@ class Workbook:
                 val = v.group(1)
             else:
                 continue
-            out[re.match(r"[A-Z]+", ref).group(0)] = _unescape(val)
+            out[col] = _unescape(val)
         return out
 
     def table_columns(self) -> dict[str, tuple[str, dict[str, str]]]:
@@ -183,14 +278,13 @@ class Workbook:
             if foglio in datasets
         }
         for name in self.sheets:
-            raw = self.xml(name)
-            for f in re.findall(r"<f[^>]*>(.*?)</f>", raw, re.S):
+            for f in formule(self.xml(name)):
                 for d, pat in patterns.items():
                     for m in pat.finditer(f):
                         usage[d][m.group(1)].add(name)
                 for tab, (foglio, lettere) in strutturati.items():
                     for m in re.finditer(re.escape(tab) + r"\[([^\]\[]+)\]", f):
-                        col = _unescape(m.group(1))
+                        col = m.group(1)
                         if col in lettere:
                             usage[foglio][lettere[col]].add(name)
         return usage
@@ -218,6 +312,9 @@ class Workbook:
                     "sheet": sheet,
                     "columns": len(re.findall(r"<tableColumn[^>]*name=", x)),
                     "sheet_dimension": self.dimension(sheet) if sheet in self.sheets else "?",
+                    "sheet_last_data_row": (
+                        self.last_data_row(sheet) if sheet in self.sheets else 0
+                    ),
                 }
             )
         return out
@@ -242,8 +339,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--all", action="store_true", help="tutti i controlli")
     ap.add_argument("--sheets", nargs="*", help="limita ai fogli indicati")
     ap.add_argument("--datasets", nargs="*", default=DEFAULT_DATASETS)
+    ap.add_argument(
+        "--header-row", nargs="*", metavar="FOGLIO=N", default=[],
+        help="riga delle intestazioni per un foglio (es. DUP_DATASET=14). "
+             "Di norma non serve: si legge da config/columns.yml.",
+    )
     ap.add_argument("--json", action="store_true", help="output JSON (per le fixture)")
     args = ap.parse_args(argv)
+
+    righe = header_rows()
+    for voce in args.header_row:
+        foglio, _, n = voce.rpartition("=")
+        if not foglio or not n.isdigit():
+            print(f"--header-row: attesa la forma FOGLIO=N, non {voce!r}", file=sys.stderr)
+            return 2
+        righe[foglio] = int(n)
 
     if not args.workbook.is_file():
         print(f"File non trovato: {args.workbook}", file=sys.stderr)
@@ -261,11 +371,12 @@ def main(argv: list[str] | None = None) -> int:
             if s not in wb.sheets:
                 print(f"[skip] foglio assente: {s}", file=sys.stderr)
                 continue
-            hdr = wb.header_row(s)
+            riga = righe.get(s, 1)
             payload["headers"][s] = {
                 "dimension": wb.dimension(s),
                 "hidden": s in wb.hidden,
-                "columns": hdr,
+                "header_row": riga,
+                "columns": wb.header_row(s, riga),
             }
 
     if args.usage or args.all:
@@ -285,7 +396,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Workbook: {args.workbook}  ({len(wb.sheets)} fogli, {len(wb.hidden)} nascosti)")
 
     for sheet, info in payload.get("headers", {}).items():
-        print(f"\n=== INTESTAZIONI {sheet}  (dim {info['dimension']}) ===")
+        riga = f", riga {info['header_row']}" if info.get("header_row", 1) != 1 else ""
+        print(f"\n=== INTESTAZIONI {sheet}  (dim {info['dimension']}{riga}) ===")
         for col, val in sorted(info["columns"].items(), key=lambda kv: col_index(kv[0])):
             print(f"  {col:>3} | {val}")
 
@@ -301,10 +413,11 @@ def main(argv: list[str] | None = None) -> int:
         for t in payload["tables"]:
             note = ""
             m = re.search(r"[A-Z]+(\d+)$", t["ref"])
-            d = re.search(r"[A-Z]+(\d+)$", t["sheet_dimension"])
-            if m and d and int(d.group(1)) > int(m.group(1)):
+            # Sulle righe vere, non su `<dimension>`: vedi `last_data_row`.
+            ultima = t.get("sheet_last_data_row") or 0
+            if m and ultima > int(m.group(1)):
                 note = (
-                    f"  <-- ATTENZIONE: i dati del foglio arrivano a riga {d.group(1)}, "
+                    f"  <-- ATTENZIONE: i dati del foglio arrivano a riga {ultima}, "
                     f"la tabella si ferma a {m.group(1)}"
                 )
             print(f"  {t['name']} su '{t['sheet']}' ref={t['ref']} ({t['columns']} col.){note}")

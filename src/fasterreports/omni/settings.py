@@ -49,10 +49,11 @@ class Settings:
     # ricostruire rilanciando il programma, perche' gli export delle settimane
     # passate non li abbiamo piu'. Va versionato.
     aht_history: Path = Path("data/aht_history.csv")
-    # Case type che non entrano nel trend settimanale. Vedi il commento in
-    # settings.yml: la lista e' ricavata dalle 11 settimane di storico curate a
-    # mano, non scelta a tavolino.
-    casetype_esclusi: tuple[str, ...] = ()
+    # I case type che si VEDONO nelle heat map di 'AHT Trend WoW'. Vuoto = non
+    # filtrare. Vedi il commento in settings.yml: la lista e' misurata sulle heat
+    # map del file legacy e sulle 11 settimane di storico curate a mano, non
+    # scelta a tavolino.
+    casetype_heatmap: tuple[str, ...] = ()
     input_files: dict[str, str] = field(default_factory=dict)
     workbook_name: str = "Omni_Report_W{week}.xlsm"
     preflight_name: str = "preflight_W{week}.txt"
@@ -185,6 +186,23 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
             "  gli stessi header+righe di csvsource. Vedi docs/architettura.md §7."
         )
 
+    # La chiave vecchia non si ignora: significava il CONTRARIO di quella nuova,
+    # e lasciarla in un file di config senza che nessuno la legga vorrebbe dire
+    # che chi la modifica non ottiene niente e non lo sa.
+    if "casetype_esclusi" in (raw.get("aht_history") or {}):
+        raise ContractError(
+            "settings.yml: `aht_history.casetype_esclusi` non esiste piu'.\n"
+            "  Era una lista di case type da TENERE FUORI dal trend. Al suo posto\n"
+            "  c'e' `aht_history.casetype_heatmap`, che elenca quelli da FARCI\n"
+            "  ENTRARE — cioe' l'opposto.\n"
+            "  Il motivo del cambio: con la sola lista degli esclusi, un case type\n"
+            "  mai visto prima entrava nelle heat map da se', perche'\n"
+            "  'AHT Trend WoW'!A5 mostra tutto quello che trova nello storico.\n"
+            "  Con la lista degli inclusi le heat map hanno un numero di righe\n"
+            "  fisso, e un case type nuovo viene SEGNALATO invece che aggiunto.\n"
+            "  Togli la chiave vecchia; se ti serve la lista, e' nel repository."
+        )
+
     mode = str(derived.get("mode", "formula"))
     if mode not in ("formula", "python"):
         raise ContractError(f"settings.yml: derived.mode={mode!r} non valido (formula|python).")
@@ -230,9 +248,9 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
         output_dir=resolve(paths.get("output", "output")),
         template=resolve(paths.get("template", "template/Omni_Report_TEMPLATE.xlsm")),
         aht_history=resolve(paths.get("aht_history", "data/aht_history.csv")),
-        casetype_esclusi=_str_tuple(
-            (raw.get("aht_history") or {}).get("casetype_esclusi"),
-            "aht_history.casetype_esclusi",
+        casetype_heatmap=_str_tuple(
+            (raw.get("aht_history") or {}).get("casetype_heatmap"),
+            "aht_history.casetype_heatmap",
         ) or (),
         input_files=dict(raw.get("input_files") or {}),
         workbook_name=str(out.get("workbook_name", "Omni_Report_W{week}.xlsm")),

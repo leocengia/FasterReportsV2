@@ -121,64 +121,70 @@ def test_senza_settimana_inferita_controlla_solo_il_lunedi():
 # ---------------------------------------------------------------------------
 
 
-def test_segnala_i_case_type_fuori_dalla_lista_curata():
+def test_segnala_i_case_type_non_in_helper_casetype():
+    """Conseguenza limitata a un foglio: 'CaseType Deepdive'."""
     rep = check_sources(
         casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")]
     )
-    (f,) = trova(rep, "case type fuori dalla lista curata")
+    (f,) = trova(rep, "case type non in 'Helper CaseType'")
     assert f.level == SEGNALA
     assert "2 combinazioni" in f.summary
     assert any("Phone | Call Assignment" in d for d in f.details)
-    assert "CaseType Deepdive" in f.hint and "AHT Trend WoW" in f.hint
-    # Non blocca: sono casi veri, e la decisione e' dell'utente.
+    assert "CaseType Deepdive" in f.hint
     assert rep.ok
 
 
-def test_dice_quanti_casi_sono_perche_marginale_va_misurato():
+def test_le_due_liste_sono_due_segnalazioni_diverse():
+    """Sono due domande diverse, si rispondono in due file diversi.
+
+    'Helper CaseType' (nel template) -> il dettaglio in 'CaseType Deepdive'.
+    `aht_history.casetype_heatmap` (in settings.yml) -> le righe delle heat map.
+    Confonderle e' l'errore da cui e' partita questa correzione.
+    """
+    rep = check_sources(
+        casetype_nuovi=[("Phone", "Collections")],
+        casetype_heatmap=("EVC",),
+        casetype_pesi={("Phone", "Collections"): (1, 3.0)},
+    )
+    deepdive = trova(rep, "case type non in 'Helper CaseType'")
+    heatmap = trova(rep, "case type fuori dalle heat map")
+    assert len(deepdive) == 1 and len(heatmap) == 1
+    assert "CaseType Deepdive" in deepdive[0].hint
+    assert "AHT Trend WoW" in heatmap[0].hint
+    assert "casetype_heatmap" in heatmap[0].hint
+
+
+def test_i_case_type_fuori_dalle_heatmap_portano_i_numeri():
     """Chiedere una decisione senza dare i numeri e' chiedere di indovinare.
 
     Nella W33 'Call Assignment' aveva 30 casi: 'marginale' non e' una parola che
     si possa usare senza guardare quel numero.
     """
     rep = check_sources(
-        casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")],
+        casetype_heatmap=("EVC",),
         casetype_pesi={
             ("Phone", "Call Assignment"): (30, 4.5),
-            ("Non-live", "Collections"): (1, 12.0),
+            ("Non-live", "Call Assignment"): (2, 6.0),
+            ("Phone", "Collections"): (1, 12.0),
+            ("Phone", "EVC"): (100, 15.0),
         },
     )
-    (f,) = trova(rep, "case type fuori dalla lista curata")
-    assert "31 casi in tutto" in f.summary
-    # Dal piu' grosso al piu' piccolo: e' l'ordine in cui si decide.
-    assert f.details[0].startswith("Phone | Call Assignment")
-    assert "30 casi" in f.details[0] and "AHT 4.5 min" in f.details[0]
-    assert "1 casi" in f.details[1]
+    (f,) = trova(rep, "case type fuori dalle heat map")
+    # Per NOME: 'Call Assignment' e' una voce sola, con i due canali sommati.
+    assert "2 case type" in f.summary and "33 casi in tutto" in f.summary
+    assert f.details == ["Call Assignment   32 casi", "Collections   1 casi"]
+    # 'EVC' e' in lista: non compare.
+    assert not any("EVC" in d for d in f.details)
 
 
-def test_senza_i_pesi_elenca_comunque_senza_inventare_numeri():
-    rep = check_sources(casetype_nuovi=[("Phone", "Collections")], casetype_pesi=None)
-    (f,) = trova(rep, "case type fuori dalla lista curata")
-    assert f.details == ["Phone | Collections"]
-    assert "casi in tutto" not in f.summary
-
-
-def test_marca_quelli_esclusi_anche_per_nome():
-    """`casetype_esclusi` e la lista curata rispondono a domande diverse.
-
-    Un case type puo' essere fuori perche' non e' nella lista curata, oppure
-    perche' e' fra gli esclusi per nome. Nel secondo caso aggiungerlo a
-    'Helper CaseType' non basterebbe, e va detto.
-    """
+def test_se_tutti_i_case_type_sono_in_lista_non_si_dice_niente():
     rep = check_sources(
-        casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")],
-        casetype_esclusi=("call assignment",),  # confronto insensibile al caso
+        casetype_heatmap=("EVC",), casetype_pesi={("Phone", "EVC"): (10, 1.0)}
     )
-    (f,) = trova(rep, "case type fuori dalla lista curata")
-    assert any("Call Assignment" in d and "escluso dal trend per nome" in d
-               for d in f.details)
-    assert not any("Collections" in d and "escluso" in d for d in f.details)
+    assert trova(rep, "case type fuori dalle heat map") == []
 
 
 def test_nessun_case_type_nuovo_non_dice_niente():
-    assert trova(check_sources(casetype_nuovi=[]), "case type nuovi") == []
-    assert trova(check_sources(casetype_nuovi=None), "case type nuovi") == []
+    for arg in ([], None):
+        rep = check_sources(casetype_nuovi=arg)
+        assert trova(rep, "case type non in 'Helper CaseType'") == []

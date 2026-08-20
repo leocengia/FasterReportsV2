@@ -406,7 +406,7 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         column_stats={n: b.stats for n, b in blocks.items() if b.stats},
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
-        casetype_esclusi=settings.casetype_esclusi,
+        casetype_heatmap=settings.casetype_heatmap,
         casetype_pesi=_casetype_pesi(contract, blocks),
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
@@ -830,7 +830,7 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
     from ..core.aht_history import (
         aggrega,
         carica,
-        filtra_curati,
+        filtra_heatmap,
         righe_foglio,
         scrivi,
         unisci,
@@ -855,30 +855,27 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
         )]
 
     iso_year, week = settimana
-    nuove = aggrega(
-        terne, iso_year=iso_year, week=week, esclusi=settings.casetype_esclusi
-    )
-    # L'ARCHIVIO tiene tutto: e' l'unica cosa che non si ricostruisce.
+    # L'ARCHIVIO tiene tutto, senza filtri: e' l'unica cosa che non si
+    # ricostruisce rilanciando il programma.
+    nuove = aggrega(terne, iso_year=iso_year, week=week)
     storico = unisci(carica(settings.aht_history), nuove)
     scrivi(settings.aht_history, storico)
 
-    # La VISTA tiene la lista curata. Letta dal TEMPLATE offline, cioe' la stessa
-    # che il preflight ha usato per dire quali case type restano fuori: il
-    # rapporto e il risultato non possono raccontare due cose diverse.
-    curati = _read_casetype_helper(settings.template)
-    tenute, fuori = filtra_curati(storico, curati)
+    # La VISTA tiene i case type che si vogliono nelle heat map.
+    _tenute, fuori = filtra_heatmap(storico, settings.casetype_heatmap or None)
     avvisi = []
     if fuori:
         avvisi.append(
-            f"{len(fuori)} combinazioni (canale, case type) sono nell'archivio ma "
-            f"NON nella lista curata di 'Helper CaseType', quindi non compaiono "
-            f"nelle heat map: "
-            + ", ".join(f"{c}|{t}" for c, t in fuori[:6])
+            f"{len(fuori)} case type sono nell'archivio ma non in "
+            f"aht_history.casetype_heatmap, quindi non compaiono nelle heat map: "
+            + ", ".join(fuori[:6])
             + (f" (+{len(fuori) - 6})" if len(fuori) > 6 else "")
-            + ". Per farle comparire, aggiungile in fondo a 'Helper CaseType' nel "
-            "template: lo storico c'e' gia' tutto e ricompare per intero."
+            + ". Per farli comparire, aggiungili a quella lista in settings.yml: "
+            "lo storico c'e' gia' tutto e ricompare per intero."
         )
-    return [write_aht_history(book, righe_foglio(storico, curati), avvisi)]
+    return [write_aht_history(
+        book, righe_foglio(storico, settings.casetype_heatmap or None), avvisi
+    )]
 
 
 def build(

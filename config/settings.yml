@@ -20,29 +20,65 @@ paths:
 # Il trend settimanale (foglio 'AHT History' -> heat map di 'AHT Trend WoW')
 # ---------------------------------------------------------------------------
 aht_history:
-  # Case type che NON entrano nel trend. Non e' un filtro di rumore: sono tipi
-  # di caso che non rappresentano lavoro confrontabile, e mescolarli agli altri
-  # sposterebbe le medie senza dire niente di utile. Il volume non c'entra —
-  # nel W30 'Call Assignment' aveva 76 casi, piu' di meta' delle combinazioni
-  # incluse, ed era comunque tenuto fuori.
+  # I case type che si VEDONO nelle heat map di 'AHT Trend WoW'. Una riga per
+  # case type, valida per entrambi i canali (Phone e Non-live), come nel file
+  # legacy.
   #
-  # Restano nei dati grezzi di SF_DATABASE e in 'Helper CaseType': escluderli
-  # dal trend non vuol dire buttarli.
+  # PERCHE' UNA LISTA CHIUSA. Le heat map non hanno un elenco scritto da nessuna
+  # parte: `AHT Trend WoW`!A5 e' `UNIQUE(FILTER('AHT History'!$C..., canale))`,
+  # cioe' mostra TUTTO quello che trova nello storico, ordinato per volume.
+  # Basta quindi un case type mai visto prima perche' compaia una riga nuova —
+  # con un dato su dodici colonne, perche' prima non esisteva — e perche'
+  # l'ordinamento sposti anche la posizione di tutte le altre righe. Misurato
+  # nella W33: 'Live Site Property Settings Issue' e 'Collections', un caso
+  # ciascuno, avevano aggiunto due righe.
   #
-  # QUESTA LISTA E' RICAVATA, NON INVENTATA. Confrontando i dati del W30 con le
-  # 11 settimane di storico gia' presenti nel template (W22-W32, curate a mano
-  # dal file WOW), questi otto case type avevano casi in ogni settimana e non
-  # comparivano MAI nello storico. E' la curatela che facevi a mano, scritta.
-  # Se una di queste righe non ti torna, togliila: e' un file di testo.
-  casetype_esclusi:
-    - "Booking Research (Rates)"
-    - "Booking Research (Settings)"
-    - "Bulk Update Request"
-    - "Call Assignment"
-    - "Partner Tool Issue"
-    - "Proactive Outreach Project"
-    - "Promotion Content Request"
-    - "Specialty Functions"
+  # QUESTA LISTA E' MISURATA, NON SCELTA A TAVOLINO. Sono i 27 case type delle
+  # heat map del file Excel legacy, e coincidono esattamente con i 27 distinti
+  # delle undici settimane di storico curato a mano (W22..W32). Verificato il
+  # 2026-08-20, e c'e' un test che lo ricontrolla a ogni giro
+  # (`test_la_lista_delle_heatmap_copre_tutto_lo_storico`): se un giorno lo
+  # storico contenesse un case type non in lista, applicare il filtro farebbe
+  # sparire righe dalle heat map, e undici settimane di curatela non si
+  # ricostruiscono.
+  #
+  # NON e' 'Helper CaseType'. Quel foglio ne elenca 31 e serve a un'altra cosa —
+  # alimentare 'CaseType Deepdive' — e i 4 in piu' (`Booking Research (Rates)`,
+  # `Bulk Update Request`, `Contract Update`, `Traveler Outreach`) non sono case
+  # type che si vogliono nelle heat map.
+  #
+  # PER AGGIUNGERNE UNO: mettilo qui e rilancia. Compare con TUTTE le settimane
+  # che ha in data/aht_history.csv, non solo da adesso — l'archivio tiene tutto,
+  # e' solo il foglio che mostra questa lista. Per toglierne uno: cancella la
+  # riga; lo storico resta nel CSV.
+  casetype_heatmap:
+    - "Account Takeover"
+    - "Booking Information"
+    - "Connectivity Questions"
+    - "Contact Update"
+    - "Content Update"
+    - "Customer Review Removal"
+    - "EVC"
+    - "Expedia Collect Invoice"
+    - "Hotel Closure Outreach"
+    - "Hotel Collect Issue"
+    - "Inventory Closeout"
+    - "Known Tool Outage Issue"
+    - "Live Site Investigation"
+    - "New Contract"
+    - "Partner Central Access"
+    - "Pre-Onboarding"
+    - "Promotion"
+    - "Property Classification"
+    - "Property Details"
+    - "Property Photos"
+    - "Property Settings"
+    - "Rates & Inventory Changes"
+    - "Refund Request"
+    - "Room Type/Rate Plan"
+    - "Special Check-In Instructions"
+    - "Supplier Initiated Relocation"
+    - "Supplier Initiated Traveler Contact"
 
 # Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
 # reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di

@@ -430,33 +430,41 @@ settimana: devono essere tutte.
 Un giorno presente in una fonte e non nell'altra. Con un export parziale è il
 primo sintomo.
 
-### `case type fuori dalla lista curata`
+### `case type non in 'Helper CaseType'`
 Nell'export ci sono combinazioni (canale, tipo di caso) che il foglio
-`Helper CaseType` non elenca. **Non entrano nel report**: né in
-`CaseType Deepdive` né nelle heat map di `AHT Trend WoW`.
+`Helper CaseType` non elenca. **Conseguenza: non compaiono in
+`CaseType Deepdive`**, che mostra la lista scritta a mano in quel foglio (e ci
+punta per posizione, con la formattazione fatta a mano sopra).
 
-È voluto, ed è la cosa che rende le heat map leggibili: quei fogli non hanno un
-elenco di tipi di caso scritto da qualche parte — mostrano *tutto quello che
-trovano nello storico*, ordinato per volume. Quindi basterebbe un tipo di caso
-mai visto prima perché comparisse una riga nuova, con **un solo dato su dodici
-colonne** (prima non esisteva), e perché l'ordinamento spostasse anche tutte le
-altre righe.
+Nient'altro cambia. In particolare **non** riguarda le heat map: quelle hanno
+una lista propria, vedi la voce qui sotto.
 
-La segnalazione porta **quanti casi** e **l'AHT medio** di ciascuna
-combinazione, dalla più grossa alla più piccola. Serve: «marginale» non è una
-parola che si possa usare senza guardare il numero — nella W33
-`Call Assignment` aveva 30 casi.
+Se uno di questi ti interessa nel deepdive, aggiungi la coppia (canale, tipo di
+caso) in fondo a `Helper CaseType` nel template.
 
-**Se una di queste ti interessa**, aggiungi la coppia (canale, tipo di caso) in
-fondo a `Helper CaseType` nel template e rilancia. Il tipo di caso comparirà con
-**tutte** le settimane che ha in `data\aht_history.csv`, non solo da adesso:
-l'archivio tiene tutto, è solo il foglio che mostra la lista curata.
+### `case type fuori dalle heat map`
+Nell'export ci sono tipi di caso che non sono in
+`aht_history.casetype_heatmap` (`config\settings.yml`), quindi **non compaiono
+nelle heat map di `AHT Trend WoW`**.
 
-**Se invece una combinazione è marcata `(escluso dal trend per nome)`**, sta
-anche in `aht_history.casetype_esclusi` (`config\settings.yml`): quella lista è
-più forte, e aggiungerla all'helper non basterebbe. Sono i tipi di caso che non
-rappresentano lavoro confrontabile — le telefonate non andate in porto, le
-funzioni speciali.
+È voluto, ed è la cosa che le rende leggibili: quel foglio non ha un elenco di
+tipi di caso scritto da qualche parte — `A5` mostra *tutto quello che trova nello
+storico*, ordinato per volume. Quindi basterebbe un tipo di caso mai visto prima
+perché comparisse una riga nuova, con **un solo dato su dodici colonne** (prima
+non esisteva), e perché l'ordinamento spostasse anche tutte le altre righe.
+Successo nella W33 con `Live Site Property Settings Issue` e `Collections`, un
+caso ciascuno.
+
+La segnalazione porta **quanti casi** ha ciascun tipo, dal più grosso al più
+piccolo. Serve: «marginale» non è una parola che si possa usare senza guardare il
+numero — nella W33 `Call Assignment` aveva 30 casi.
+
+**I dati non sono persi.** `data\aht_history.csv` conserva *tutto*, anche i tipi
+di caso fuori lista: è l'archivio, ed è l'unica cosa del progetto che non si
+ricostruisce. Il filtro agisce solo su cosa si *vede*.
+
+Quindi se un giorno uno di questi ti interessa, aggiungilo alla lista e rilancia:
+comparirà con **tutte** le settimane che l'archivio ha, non solo da quel momento.
 
 ### `date ambigue in <fonte>!<colonna>`
 Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un
@@ -701,7 +709,7 @@ Tutto quello che sta in `config\`. Sono file di testo: aprili con Notepad.
 | `sources.roster_sheet` | quale foglio leggere nel file dei turni (`publish`) |
 | `sources.backoffice_sheet` | quale foglio nel back office (`Only Cases Shifts`) |
 | `paths.aht_history` | dove sta lo storico del trend (`data/aht_history.csv`) |
-| `aht_history.casetype_esclusi` | i tipi di caso che **non** entrano nelle heat map (restano nei dati grezzi e nell'helper) |
+| `aht_history.casetype_heatmap` | i tipi di caso che si **vedono** nelle heat map di `AHT Trend WoW`. Sono i 27 del file legacy. Aggiungerne uno lo fa comparire con tutte le settimane che `data\aht_history.csv` ha; togliere una riga lo nasconde senza perdere niente |
 | `output.workbook_name` | come si chiama il file prodotto |
 | `validation.max_uncoercible_ratio` | quanti valori illeggibili tollerare per colonna (0.02 = 2%) |
 | `excel.visible` | mostrare sempre Excel |

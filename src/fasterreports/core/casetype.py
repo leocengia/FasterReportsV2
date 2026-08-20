@@ -1,4 +1,4 @@
-"""L'elenco (canale, case type) che alimenta 'Helper CaseType'.
+"""Le coppie (canale, case type) dei dati, contro la lista curata del template.
 
 Il problema che risolve, misurato sul W33: 'Helper CaseType' nel template porta
 una lista scritta a mano di 31 case type per canale (righe 2..32 Phone, 33..63
@@ -9,13 +9,17 @@ mostrava nessun errore: quei casi semplicemente non esistevano, e `Call
 Assignment` superava perfino la soglia di volume, cioe' era un risultato vero
 che nessuno avrebbe visto.
 
-Perche' si APPENDE invece di riscrivere tutta la lista ordinata: `CaseType
-Deepdive` punta alle righe di 'Helper CaseType' per posizione
-(`'Helper CaseType'!$B2`, `$B3`, ...) e porta della formattazione fatta a mano.
-Riordinare la lista sposterebbe i case type sotto le righe sbagliate e
-rovinerebbe quel lavoro. Lasciando ferme le righe che ci sono e mettendo le
-nuove in fondo, il deepdive resta esattamente com'e' — e chi vuole i numeri
-completi li trova nell'helper.
+La lista curata vive in 'Helper CaseType' del template, ed e' l'utente che la
+decide: 'CaseType Deepdive' punta a quelle righe per posizione e porta della
+formattazione fatta a mano, e le heat map di 'AHT Trend WoW' mostrano solo i case
+type che quella lista ammette.
+
+Fino al 2026-08-20 le coppie nuove venivano APPESE in fondo all'helper. E'
+stato tolto, perche' allargava la lista curata da se': la conseguenza, misurata
+nella W33, era che due combinazioni mai viste prima aggiungevano due righe alle
+heat map — con un dato su dodici colonne, e spostando l'ordinamento di tutte le
+altre. Ora le coppie fuori lista si ELENCANO nel preflight, con volume e AHT, e
+chi cura la lista decide.
 
 Nessun Excel qui: sono liste di stringhe. La parte che parla con xlwings sta in
 `omni/writer.py`.
@@ -46,17 +50,17 @@ def coppie_dai_dati(righe) -> list[tuple[str, str]]:
     return sorted(viste)
 
 
-def da_appendere(esistenti, presenti) -> list[tuple[str, str]]:
-    """Le coppie da aggiungere in fondo: quelle nei dati e non ancora in lista.
+def fuori_lista(curati, presenti) -> list[tuple[str, str]]:
+    """Le coppie nei dati che la lista curata non contiene.
 
     Ordinate per canale e case type, cosi' che due giri sugli stessi dati
-    producano lo stesso risultato — l'ordine di scoperta nell'export non deve
-    entrare nel foglio.
+    producano lo stesso elenco — l'ordine di scoperta nell'export non deve
+    entrare nel rapporto.
 
-    Non restituisce mai qualcosa da RIMUOVERE: un case type che questa settimana
-    non ha casi resta in lista con volume zero, ed e' giusto — togliendolo si
+    Non dice mai che qualcosa va RIMOSSO dalla lista curata: un case type che
+    questa settimana non ha casi resta in lista, ed e' giusto — togliendolo si
     sposterebbero tutte le righe sotto di lui, che e' esattamente cio' che
     'CaseType Deepdive' non puo' sopportare.
     """
-    gia = {normalizza(c, t) for c, t in esistenti}
+    gia = {normalizza(c, t) for c, t in curati}
     return sorted({normalizza(c, t) for c, t in presenti} - gia)

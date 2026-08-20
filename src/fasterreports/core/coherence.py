@@ -97,6 +97,7 @@ def check_sources(
     date_viewpoint: list | None = None,
     casetype_nuovi: list[tuple[str, str]] | None = None,
     casetype_esclusi: tuple[str, ...] = (),
+    casetype_pesi: dict | None = None,
     dup_closed: list | None = None,
     dup_capienze: dict[str, int] | None = None,
     dup_conteggi: dict[str, int] | None = None,
@@ -146,7 +147,7 @@ def check_sources(
     if date_viewpoint:
         _check_date_viewpoint(rep, date_viewpoint, week_inferred)
     if casetype_nuovi:
-        _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi)
+        _check_casetype_nuovi(rep, casetype_nuovi, casetype_esclusi, casetype_pesi)
     if dup_closed:
         _check_settimana_duplicati(rep, dup_closed, week_inferred)
     if dup_capienze and dup_conteggi:
@@ -410,49 +411,76 @@ def _check_date_viewpoint(rep, valori: list, week_inferred) -> None:
             ))
 
 
-def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], esclusi=()) -> None:
-    """Case type nei dati che il template non conosceva.
+def _check_casetype_nuovi(
+    rep, nuovi: list[tuple[str, str]], esclusi=(), pesi: dict | None = None
+) -> None:
+    """Case type nei dati che la lista curata del template non contiene.
 
-    Vengono appesi automaticamente a 'Helper CaseType', quindi non si perde
-    niente. Ma la conseguenza da segnalare e' un'altra, e riguarda il trend:
-    un case type nuovo che non e' nella lista delle esclusioni **entra nelle
-    heat map**, dove finora non c'era. Il grafico cambia forma, e chi lo guarda
-    la settimana dopo non ha modo di sapere perche'.
+    NON entrano da nessuna parte: ne' in 'CaseType Deepdive' (lista curata a
+    mano, righe per posizione) ne' nelle heat map di 'AHT Trend WoW' (che leggono
+    lo storico, e lo storico ammette solo la lista curata). E' la scelta fatta il
+    2026-08-20, dopo aver visto due combinazioni nuove aggiungere due righe alle
+    heat map della W33 senza che nessuno le avesse chieste.
 
-    Quindi i nuovi si dividono in due, e i due gruppi vogliono azioni diverse:
-    quelli esclusi non richiedono niente, gli altri richiedono una decisione —
-    tenerli nel trend o aggiungerli a `aht_history.casetype_esclusi`.
+    Ma non entrare non deve voler dire non esistere: sono casi veri, lavorati da
+    persone vere. Quindi questa segnalazione porta **volume e AHT**, che e' cio'
+    che serve per decidere se il case type e' marginale davvero — nella W33
+    'Call Assignment' aveva 30 casi, e sarebbe stato sbagliato scartarlo senza
+    sapere quanti erano.
+
+    `pesi` e' `{(canale, case type): (volume, aht)}`. Quando non c'e' (un
+    chiamante che non li ha calcolati) si elencano le combinazioni senza numeri:
+    meno utile, ma non si inventa.
     """
     fuori = {str(t).strip().casefold() for t in esclusi}
-    nel_trend = [(c, t) for c, t in nuovi if t.strip().casefold() not in fuori]
-    fuori_trend = [(c, t) for c, t in nuovi if t.strip().casefold() in fuori]
+    pesi = pesi or {}
 
-    dettagli = [f"{c} | {t}   -> ENTRA nel trend" for c, t in nel_trend]
-    dettagli += [f"{c} | {t}   (escluso dal trend)" for c, t in fuori_trend]
+    def peso(c, t):
+        return pesi.get((c, t)) or pesi.get((c.strip(), t.strip()))
 
-    hint = (
-        "Sono stati appesi in fondo a 'Helper CaseType', quindi i loro numeri\n"
-        "esistono e sono corretti. Non compaiono in 'CaseType Deepdive', che ha una\n"
-        "lista curata a mano: se uno di questi ti interessa, aggiungilo lì."
+    def riga(c, t):
+        p = peso(c, t)
+        etichetta = "escluso dal trend per nome" if t.strip().casefold() in fuori else ""
+        if p:
+            vol, aht = p
+            testo = f"{c} | {t}   {vol} casi"
+            if aht:
+                testo += f", AHT {aht:.1f} min"
+        else:
+            testo = f"{c} | {t}"
+        return testo + (f"   ({etichetta})" if etichetta else "")
+
+    # Dal piu' grosso al piu' piccolo: e' l'ordine in cui si decide.
+    ordinati = sorted(
+        nuovi, key=lambda ct: -((peso(*ct) or (0, 0))[0]), reverse=False
     )
-    if nel_trend:
-        hint += (
-            "\nQuelli marcati ENTRA compaiono da questa settimana nelle heat map di\n"
-            "'AHT Trend WoW', dove prima non c'erano. Se non devono starci, aggiungili\n"
-            "a aht_history.casetype_esclusi in settings.yml e rilancia: lo storico si\n"
-            "riscrive, non si somma."
-        )
+    dettagli = [riga(c, t) for c, t in ordinati]
+
+    totale = sum((peso(c, t) or (0, 0))[0] for c, t in nuovi)
+    summary = (
+        f"{len(nuovi)} combinazioni (canale, case type) non sono nella lista "
+        f"curata di 'Helper CaseType'"
+    )
+    if totale:
+        summary += f" — {totale} casi in tutto"
 
     rep.add(Finding(
-        check="case type nuovi",
+        check="case type fuori dalla lista curata",
         level=SEGNALA,
-        summary=(
-            f"{len(nuovi)} combinazioni (canale, case type) non erano in "
-            f"'Helper CaseType'"
-            + (f", di cui {len(nel_trend)} entrano nel trend" if nel_trend else "")
-        ),
+        summary=summary,
         details=dettagli,
-        hint=hint,
+        hint=(
+            "NON entrano nel report: ne' in 'CaseType Deepdive' ne' nelle heat map\n"
+            "di 'AHT Trend WoW'. E' voluto — le heat map devono restare confrontabili\n"
+            "settimana su settimana, e una riga nuova con un solo dato su dodici\n"
+            "colonne sposta anche l'ordinamento di tutte le altre.\n"
+            "Se uno di questi ti interessa, aggiungi la coppia (canale, case type) in\n"
+            "fondo a 'Helper CaseType' nel template e rilancia: lo storico si riscrive,\n"
+            "e il case type compare con TUTTE le settimane che ha nel CSV, non solo\n"
+            "da adesso.\n"
+            "Guarda il numero di casi prima di decidere: e' il solo modo di sapere se\n"
+            "'marginale' e' vero."
+        ),
     ))
 
 

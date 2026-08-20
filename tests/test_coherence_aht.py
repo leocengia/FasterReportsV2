@@ -121,46 +121,62 @@ def test_senza_settimana_inferita_controlla_solo_il_lunedi():
 # ---------------------------------------------------------------------------
 
 
-def test_segnala_i_case_type_nuovi_elencandoli():
-    rep = check_sources(casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")])
-
-    (f,) = trova(rep, "case type nuovi")
+def test_segnala_i_case_type_fuori_dalla_lista_curata():
+    rep = check_sources(
+        casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")]
+    )
+    (f,) = trova(rep, "case type fuori dalla lista curata")
     assert f.level == SEGNALA
     assert "2 combinazioni" in f.summary
     assert any("Phone | Call Assignment" in d for d in f.details)
-    assert "CaseType Deepdive" in f.hint
-    # Non blocca: i numeri finiscono comunque nell'helper, non si perde nulla.
+    assert "CaseType Deepdive" in f.hint and "AHT Trend WoW" in f.hint
+    # Non blocca: sono casi veri, e la decisione e' dell'utente.
     assert rep.ok
 
 
-def test_distingue_i_nuovi_che_entrano_nel_trend_da_quelli_esclusi():
-    """La conseguenza che conta e' sul trend: un case type nuovo NON escluso
-    compare da questa settimana nelle heat map, dove prima non c'era, e il
-    grafico cambia forma senza che nulla lo dica."""
+def test_dice_quanti_casi_sono_perche_marginale_va_misurato():
+    """Chiedere una decisione senza dare i numeri e' chiedere di indovinare.
+
+    Nella W33 'Call Assignment' aveva 30 casi: 'marginale' non e' una parola che
+    si possa usare senza guardare quel numero.
+    """
     rep = check_sources(
         casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")],
-        casetype_esclusi=("Call Assignment",),
+        casetype_pesi={
+            ("Phone", "Call Assignment"): (30, 4.5),
+            ("Non-live", "Collections"): (1, 12.0),
+        },
     )
-    (f,) = trova(rep, "case type nuovi")
+    (f,) = trova(rep, "case type fuori dalla lista curata")
+    assert "31 casi in tutto" in f.summary
+    # Dal piu' grosso al piu' piccolo: e' l'ordine in cui si decide.
+    assert f.details[0].startswith("Phone | Call Assignment")
+    assert "30 casi" in f.details[0] and "AHT 4.5 min" in f.details[0]
+    assert "1 casi" in f.details[1]
 
-    assert "1 entrano nel trend" in f.summary
-    entra = [d for d in f.details if "ENTRA" in d]
-    assert entra == ["Non-live | Collections   -> ENTRA nel trend"]
-    assert any("Call Assignment" in d and "escluso dal trend" in d for d in f.details)
-    assert "casetype_esclusi" in f.hint
+
+def test_senza_i_pesi_elenca_comunque_senza_inventare_numeri():
+    rep = check_sources(casetype_nuovi=[("Phone", "Collections")], casetype_pesi=None)
+    (f,) = trova(rep, "case type fuori dalla lista curata")
+    assert f.details == ["Phone | Collections"]
+    assert "casi in tutto" not in f.summary
 
 
-def test_se_tutti_i_nuovi_sono_esclusi_non_si_parla_di_trend():
-    """Niente cambia nelle heat map: il suggerimento su come escluderli sarebbe
-    rumore."""
+def test_marca_quelli_esclusi_anche_per_nome():
+    """`casetype_esclusi` e la lista curata rispondono a domande diverse.
+
+    Un case type puo' essere fuori perche' non e' nella lista curata, oppure
+    perche' e' fra gli esclusi per nome. Nel secondo caso aggiungerlo a
+    'Helper CaseType' non basterebbe, e va detto.
+    """
     rep = check_sources(
-        casetype_nuovi=[("Phone", "Call Assignment")],
+        casetype_nuovi=[("Phone", "Call Assignment"), ("Non-live", "Collections")],
         casetype_esclusi=("call assignment",),  # confronto insensibile al caso
     )
-    (f,) = trova(rep, "case type nuovi")
-    assert "entrano nel trend" not in f.summary
-    assert "ENTRA" not in "".join(f.details)
-    assert "casetype_esclusi" not in f.hint
+    (f,) = trova(rep, "case type fuori dalla lista curata")
+    assert any("Call Assignment" in d and "escluso dal trend per nome" in d
+               for d in f.details)
+    assert not any("Collections" in d and "escluso" in d for d in f.details)
 
 
 def test_nessun_case_type_nuovo_non_dice_niente():

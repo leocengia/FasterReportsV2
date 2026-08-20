@@ -372,3 +372,155 @@ def test_le_esclusioni_del_repo_corrispondono_alla_curatela_storica():
         f"questi case type sono dichiarati esclusi ma stanno nello storico: "
         f"{intrusi}. Togli la riga da settings.yml, oppure togli le righe dal CSV."
     )
+
+
+# ---------------------------------------------------------------------------
+# La lista curata: l'archivio tiene tutto, la vista mostra i case type scelti
+# ---------------------------------------------------------------------------
+
+CURATI = [("Phone", "EVC"), ("Non-live", "EVC"), ("Phone", "Booking Information")]
+
+
+def _st(*coppie, week=33):
+    return [
+        RigaStorico(2026, week, canale, ct, 10, 12.0) for canale, ct in coppie
+    ]
+
+
+def test_la_vista_tiene_solo_le_coppie_curate():
+    """`AHT Trend WoW`!A5 e' `UNIQUE(FILTER('AHT History'!C...))`: mostra tutto
+    quello che trova nel foglio. Quindi e' il foglio che va filtrato."""
+    from fasterreports.core.aht_history import filtra_curati
+
+    storico = _st(("Phone", "EVC"), ("Phone", "Collections"), ("Non-live", "EVC"))
+    tenute, fuori = filtra_curati(storico, CURATI)
+    assert [(r.channel, r.case_type) for r in tenute] == [
+        ("Non-live", "EVC"), ("Phone", "EVC"),
+    ]
+    assert fuori == [("Phone", "Collections")]
+
+
+def test_il_filtro_e_per_COPPIA_non_per_nome():
+    """Le heat map sono una per canale: se 'EVC' e' curato solo per Phone, una
+    riga 'EVC' nella heat map Non-live sarebbe comunque una riga in piu'."""
+    from fasterreports.core.aht_history import filtra_curati
+
+    tenute, fuori = filtra_curati(
+        _st(("Phone", "EVC"), ("Non-live", "EVC")), [("Phone", "EVC")]
+    )
+    assert [(r.channel, r.case_type) for r in tenute] == [("Phone", "EVC")]
+    assert fuori == [("Non-live", "EVC")]
+
+
+def test_senza_lista_curata_non_si_filtra_niente():
+    """Un template senza 'Helper CaseType': inventare un filtro sarebbe peggio
+    che non averlo."""
+    from fasterreports.core.aht_history import filtra_curati
+
+    storico = _st(("Phone", "EVC"), ("Phone", "Collections"))
+    tenute, fuori = filtra_curati(storico, None)
+    assert len(tenute) == 2 and fuori == []
+
+
+def test_righe_foglio_applica_la_lista_curata():
+    from fasterreports.core.aht_history import righe_foglio
+
+    righe = righe_foglio(_st(("Phone", "EVC"), ("Phone", "Collections")), CURATI)
+    case_type = [r[2] for r in righe[1:]]
+    assert case_type == ["EVC"]
+
+
+def test_l_archivio_invece_tiene_tutto():
+    """E' il guadagno del filtro a valle: aggiungere una coppia alla lista curata
+    fa comparire il case type con TUTTE le settimane che l'archivio ha.
+
+    Col filtro in `aggrega` avrebbe avuto un dato su dodici colonne — cioe'
+    esattamente l'artefatto per cui il filtro esiste.
+    """
+    from fasterreports.core.aht_history import filtra_curati, righe_foglio
+
+    archivio = (
+        _st(("Phone", "Collections"), week=31)
+        + _st(("Phone", "Collections"), week=32)
+        + _st(("Phone", "Collections"), week=33)
+    )
+    # Fuori dalla lista: il foglio non lo mostra affatto.
+    assert righe_foglio(archivio, CURATI) == [list(COLONNE)]
+    # Aggiunto alla lista: compaiono tutte e tre le settimane, non solo l'ultima.
+    tenute, _ = filtra_curati(archivio, CURATI + [("Phone", "Collections")])
+    assert sorted(r.week for r in tenute) == [31, 32, 33]
+
+
+def test_riscrivere_una_settimana_la_sostituisce_per_intero():
+    """Il caso della W33: due coppie erano gia' finite nel CSV.
+
+    Con la sostituzione riga per riga sarebbero rimaste per sempre — il giro
+    nuovo non le produce, quindi non le sovrascrive, quindi nessuno le tocca
+    piu'. Silenzioso e permanente.
+    """
+    prima = _st(("Phone", "EVC"), ("Phone", "Collections"), week=33)
+    dopo = _st(("Phone", "EVC"), week=33)
+    unito = unisci(prima, dopo)
+    assert [(r.week, r.case_type) for r in unito] == [(33, "EVC")]
+
+
+def test_riscrivere_una_settimana_non_tocca_le_altre():
+    prima = _st(("Phone", "EVC"), week=32) + _st(("Phone", "Collections"), week=33)
+    unito = unisci(prima, _st(("Phone", "EVC"), week=33))
+    assert sorted((r.week, r.case_type) for r in unito) == [
+        (32, "EVC"), (33, "EVC"),
+    ]
+
+
+def test_la_lista_curata_del_template_riproduce_lo_storico_vero():
+    """La prova che la regola nuova non cambia i numeri di undici settimane.
+
+    Se 'Helper CaseType' fosse la lista sbagliata, applicarla allo storico
+    esistente ne butterebbe via delle righe — e undici settimane di curatela a
+    mano non si ricostruiscono. Quindi si verifica sui FILE VERI: le coppie dello
+    storico W22..W32 devono essere TUTTE dentro la lista curata del template.
+
+    Misurato il 2026-08-20: 'Helper CaseType' ha 31 case type per canale (62
+    coppie), lo storico ne usa 27 (52 coppie), e l'inclusione e' totale. La
+    differenza fra i 29 ammessi (31 meno gli 8 esclusi per nome) e i 27 dello
+    storico sono 'Contract Update' e 'Traveler Outreach', che semplicemente non
+    hanno avuto casi in quelle settimane.
+
+    La lista si legge col LETTORE DI PRODUZIONE e non riparsando l'XML qui: la
+    prima stesura di questo test lo riparsava e sbagliava, perche' non faceva
+    unescape delle entita' — `Rates & Inventory Changes` diventava
+    `Rates &amp;amp; Inventory Changes` e risultava fuori lista. Un test che
+    reimplementa cio' che verifica misura la propria copia, non il programma.
+    """
+    import csv
+
+    from fasterreports.omni.orchestrate import _read_casetype_helper
+
+    ROOT = Path(__file__).resolve().parents[1]
+    template = ROOT / "template" / "Omni_Report_TEMPLATE.xlsm"
+    csv_path = ROOT / "data" / "aht_history.csv"
+    if not (template.is_file() and csv_path.is_file()):
+        pytest.skip("template o storico assenti")
+
+    curati = _read_casetype_helper(template)
+    assert curati is not None, "il template non ha 'Helper CaseType'"
+    coppie = {(c.strip(), t.strip()) for c, t in curati}
+    assert len(coppie) >= 50, f"lista curata sospettosamente corta: {len(coppie)}"
+    assert ("Phone", "Rates & Inventory Changes") in coppie, (
+        "le entita' XML non sono state de-escapate: il filtro butterebbe via un "
+        "case type vero"
+    )
+
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        storico = {
+            (r["channel"].strip(), r["case_type"].strip()) for r in csv.DictReader(f)
+        }
+
+    fuori = sorted(storico - coppie)
+    assert not fuori, (
+        f"{len(fuori)} coppie dello storico NON sono nella lista curata di "
+        f"'Helper CaseType': applicando il filtro sparirebbero dalle heat map.\n"
+        f"  {fuori}\n"
+        f"  Se e' voluto, aggiungile al template; se non lo e', il filtro sta "
+        f"leggendo la lista sbagliata."
+    )

@@ -13,7 +13,7 @@ una riga esistente metterebbe i case type sotto le etichette sbagliate.
 
 from __future__ import annotations
 
-from fasterreports.core.casetype import coppie_dai_dati, da_appendere
+from fasterreports.core.casetype import coppie_dai_dati, fuori_lista
 
 
 def test_coppie_dai_dati_traduce_il_canale():
@@ -42,12 +42,12 @@ def test_coppie_dai_dati_pulisce_gli_spazi():
 def test_appende_solo_quello_che_manca():
     esistenti = [("Phone", "EVC"), ("Non-live", "EVC")]
     presenti = [("Phone", "EVC"), ("Phone", "Call Assignment"), ("Non-live", "EVC")]
-    assert da_appendere(esistenti, presenti) == [("Phone", "Call Assignment")]
+    assert fuori_lista(esistenti, presenti) == [("Phone", "Call Assignment")]
 
 
 def test_niente_da_fare_se_la_lista_e_completa():
     coppie = [("Phone", "EVC"), ("Non-live", "Alfa")]
-    assert da_appendere(coppie, coppie) == []
+    assert fuori_lista(coppie, coppie) == []
 
 
 def test_non_propone_mai_di_rimuovere():
@@ -55,13 +55,13 @@ def test_non_propone_mai_di_rimuovere():
     togliendolo si sposterebbero tutte le righe sotto di lui, che e' esattamente
     cio' che 'CaseType Deepdive' non puo' sopportare."""
     esistenti = [("Phone", "Contract Update"), ("Phone", "EVC")]
-    assert da_appendere(esistenti, [("Phone", "EVC")]) == []
+    assert fuori_lista(esistenti, [("Phone", "EVC")]) == []
 
 
 def test_lo_stesso_case_type_su_due_canali_sono_due_righe():
     """Nella W33 'Specialty Functions' mancava su entrambi i canali: sono due
     combinazioni distinte, non una."""
-    nuovi = da_appendere([], [("Phone", "Specialty Functions"), ("Non-live", "Specialty Functions")])
+    nuovi = fuori_lista([], [("Phone", "Specialty Functions"), ("Non-live", "Specialty Functions")])
     assert len(nuovi) == 2
 
 
@@ -69,12 +69,12 @@ def test_ordine_deterministico():
     """L'ordine di scoperta nell'export non deve entrare nel foglio: due giri
     sugli stessi dati devono appendere nello stesso ordine."""
     presenti = [("Phone", "Zeta"), ("Non-live", "Alfa"), ("Phone", "Alfa")]
-    assert da_appendere([], presenti) == da_appendere([], list(reversed(presenti)))
-    assert da_appendere([], presenti) == [
+    assert fuori_lista([], presenti) == fuori_lista([], list(reversed(presenti)))
+    assert fuori_lista([], presenti) == [
         ("Non-live", "Alfa"), ("Phone", "Alfa"), ("Phone", "Zeta")
     ]
 
 
 def test_confronto_insensibile_agli_spazi_intorno():
     """Un ' EVC' nella lista scritta a mano non deve far riappendere 'EVC'."""
-    assert da_appendere([(" Phone ", " EVC ")], [("Phone", "EVC")]) == []
+    assert fuori_lista([(" Phone ", " EVC ")], [("Phone", "EVC")]) == []

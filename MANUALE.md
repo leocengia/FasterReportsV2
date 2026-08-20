@@ -430,22 +430,33 @@ settimana: devono essere tutte.
 Un giorno presente in una fonte e non nell'altra. Con un export parziale è il
 primo sintomo.
 
-### `case type nuovi`
+### `case type fuori dalla lista curata`
 Nell'export ci sono combinazioni (canale, tipo di caso) che il foglio
-`Helper CaseType` non elencava. Vengono **aggiunte automaticamente** in fondo a
-quel foglio, quindi i loro numeri esistono e sono corretti.
+`Helper CaseType` non elenca. **Non entrano nel report**: né in
+`CaseType Deepdive` né nelle heat map di `AHT Trend WoW`.
 
-L'elenco li divide in due, e solo il primo gruppo richiede una decisione:
+È voluto, ed è la cosa che rende le heat map leggibili: quei fogli non hanno un
+elenco di tipi di caso scritto da qualche parte — mostrano *tutto quello che
+trovano nello storico*, ordinato per volume. Quindi basterebbe un tipo di caso
+mai visto prima perché comparisse una riga nuova, con **un solo dato su dodici
+colonne** (prima non esisteva), e perché l'ordinamento spostasse anche tutte le
+altre righe.
 
-- **`-> ENTRA nel trend`**: da questa settimana compaiono nelle heat map di
-  `AHT Trend WoW`, dove prima non c'erano. Il grafico cambia forma. Se non
-  devono starci, aggiungili a `aht_history.casetype_esclusi` in
-  `config\settings.yml` e rilancia — lo storico si riscrive, non si somma.
-- **`(escluso dal trend)`**: sono già nella lista delle esclusioni. Nessuna
-  azione: restano nei dati grezzi e nell'helper, fuori dalle heat map.
+La segnalazione porta **quanti casi** e **l'AHT medio** di ciascuna
+combinazione, dalla più grossa alla più piccola. Serve: «marginale» non è una
+parola che si possa usare senza guardare il numero — nella W33
+`Call Assignment` aveva 30 casi.
 
-In nessuno dei due casi compaiono in `CaseType Deepdive`, che mostra una lista
-scelta a mano: se uno ti interessa, va aggiunto lì.
+**Se una di queste ti interessa**, aggiungi la coppia (canale, tipo di caso) in
+fondo a `Helper CaseType` nel template e rilancia. Il tipo di caso comparirà con
+**tutte** le settimane che ha in `data\aht_history.csv`, non solo da adesso:
+l'archivio tiene tutto, è solo il foglio che mostra la lista curata.
+
+**Se invece una combinazione è marcata `(escluso dal trend per nome)`**, sta
+anche in `aht_history.casetype_esclusi` (`config\settings.yml`): quella lista è
+più forte, e aggiungerla all'helper non basterebbe. Sono i tipi di caso che non
+rappresentano lavoro confrontabile — le telefonate non andate in porto, le
+funzioni speciali.
 
 ### `date ambigue in <fonte>!<colonna>`
 Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un

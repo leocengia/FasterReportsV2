@@ -114,8 +114,12 @@ def aggrega(righe, *, iso_year: int, week: int, esclusi=()) -> list[RigaStorico]
     volume non c'entra: nel W30 `Call Assignment` aveva 76 casi, piu' di meta'
     delle combinazioni incluse, ed era comunque escluso.
 
-    Restano nei dati grezzi di `SF_DATABASE` e in 'Helper CaseType': escluderli
-    dal trend non vuol dire buttarli.
+    Restano nei dati grezzi di `SF_DATABASE`: escluderli dal trend non vuol dire
+    buttarli.
+
+    QUESTO E' L'UNICO FILTRO CHE TOCCA L'ARCHIVIO. Quali case type si VEDONO
+    nelle heat map lo decide la lista curata di 'Helper CaseType', e quel filtro
+    sta a valle, in `righe_foglio` — vedi il perche' scritto la'.
     """
     fuori = {str(t).strip().casefold() for t in esclusi}
     volumi: dict[tuple[str, str], int] = {}
@@ -175,20 +179,32 @@ def ordina(righe) -> list[RigaStorico]:
 
 
 def unisci(storico, nuove) -> list[RigaStorico]:
-    """Innesta le righe nuove nello storico, sostituendo quelle omonime.
+    """Innesta le righe nuove nello storico, RISCRIVENDO le settimane che toccano.
 
-    Rigenerare il report della stessa settimana due volte — cosa che capita
-    ogni volta che si corregge un export e si rilancia — non deve raddoppiare
-    le righe di quella settimana ne' lasciare mescolati i numeri vecchi con i
-    nuovi. La chiave e' `(week_key, channel, case_type)` e vince l'ultimo
-    arrivato: il giro piu' recente e' quello fatto sui dati corretti.
+    Rigenerare il report della stessa settimana — cosa che capita ogni volta che
+    si corregge un export e si rilancia — non deve raddoppiare le righe di quella
+    settimana ne' lasciare mescolati i numeri vecchi con i nuovi.
 
-    Attenzione a cosa NON fa: non rimuove le settimane vecchie e non rimuove i
-    case type che non compaiono piu'. Lo storico e' cumulativo per definizione,
-    e la finestra delle ultime 11 settimane la decide il foglio 'AHT Trend WoW'
-    con `TAKE`, non questo modulo.
+    Una settimana presente in `nuove` viene sostituita PER INTERO, non riga per
+    riga. La differenza conta, e per due motivi misurati:
+
+    - **un case type che spariva restava.** Con la sostituzione per chiave
+      `(week_key, channel, case_type)`, correggere un export che conteneva una
+      combinazione sbagliata lasciava la riga sbagliata nello storico per sempre:
+      il giro nuovo non la produceva, quindi non la sovrascriveva, quindi
+      nessuno la toccava piu'. Silenzioso, e permanente.
+    - **restringere la lista curata non avrebbe effetto.** Togliere un case type
+      da 'Helper CaseType' (o aggiungerlo agli esclusi) e rilanciare deve farlo
+      uscire dalle heat map. Riga per riga non sarebbe uscito: e' esattamente il
+      caso della W33, dove due combinazioni nuove erano gia' finite nel CSV.
+
+    Le settimane che `nuove` NON tocca restano intatte: lo storico e' cumulativo
+    per definizione, e la finestra delle ultime 11 settimane la decide il foglio
+    'AHT Trend WoW' con `TAKE`, non questo modulo.
     """
-    per_chiave = {r.chiave: r for r in storico}
+    settimane_riscritte = {r.week_key for r in nuove}
+    out = [r for r in storico if r.week_key not in settimane_riscritte]
+    per_chiave = {r.chiave: r for r in out}
     for r in nuove:
         per_chiave[r.chiave] = r
     return ordina(per_chiave.values())
@@ -267,7 +283,54 @@ def settimane(righe) -> list[int]:
     return sorted({r.week_key for r in righe})
 
 
-def righe_foglio(storico) -> list[list]:
+def filtra_curati(storico, inclusi=None) -> tuple[list[RigaStorico], list[tuple[str, str]]]:
+    """Tiene solo le coppie `(canale, case type)` della lista curata.
+
+    Restituisce `(righe tenute, coppie lasciate fuori)`: le seconde vanno dette,
+    non semplicemente non scritte.
+
+    PERCHE' ESISTE. Le heat map di 'AHT Trend WoW' non hanno un elenco di case
+    type: `A5` e' `UNIQUE(FILTER('AHT History'!$C..., canale="Phone"))`, cioe'
+    mostra **tutto quello che trova nello storico**, ordinato per volume. Basta
+    quindi che un case type mai visto prima compaia in una settimana, e le heat
+    map guadagnano una riga da sole. Misurato nella W33: due combinazioni nuove
+    ('Non-live | Live Site Property Settings Issue', 'Phone | Collections')
+    hanno aggiunto due righe che nessuno aveva chiesto — con **un dato su dodici
+    colonne**, perche' prima non esistevano. E siccome `A5` ordina per volume,
+    una riga in piu' sposta anche la posizione di tutte le altre.
+
+    PERCHE' IL FILTRO STA QUI E NON IN `aggrega`. Perche' distingue l'ARCHIVIO
+    dalla VISTA, e la differenza si paga una volta e rende tutto reversibile:
+
+      data/aht_history.csv  ->  ARCHIVIO. Tiene tutto quello che passa da
+                                `aggrega`, lista curata o no. E' l'unica cosa del
+                                progetto che non si ricostruisce rilanciando il
+                                programma, quindi non le si butta niente.
+      foglio 'AHT History'  ->  VISTA. Solo la lista curata, ed e' quella che le
+                                heat map leggono.
+
+    Il guadagno concreto: aggiungere una coppia a 'Helper CaseType' e rilanciare
+    fa comparire il case type con **tutte** le settimane che l'archivio ha, non
+    solo da quel momento. Col filtro in `aggrega` avrebbe avuto un dato su
+    dodici colonne — cioe' esattamente l'artefatto per cui il filtro esiste.
+
+    `inclusi=None` vuol dire "non so qual e' la lista curata" (un template senza
+    'Helper CaseType') e non filtra niente: inventare un filtro sarebbe peggio
+    che non averlo.
+    """
+    if inclusi is None:
+        return ordina(storico), []
+    dentro = {(str(c).strip().casefold(), str(t).strip().casefold()) for c, t in inclusi}
+    tenute, fuori = [], {}
+    for r in storico:
+        if (r.channel.strip().casefold(), r.case_type.strip().casefold()) in dentro:
+            tenute.append(r)
+        else:
+            fuori[(r.channel, r.case_type)] = None
+    return ordina(tenute), sorted(fuori)
+
+
+def righe_foglio(storico, inclusi=None) -> list[list]:
     """Lo storico nella forma che va nelle celle di 'AHT History', A..G.
 
     Va scritto INTERO, non tagliato alle ultime 11 settimane come chiedeva la
@@ -275,5 +338,9 @@ def righe_foglio(storico) -> list[list]:
     recenti (`TAKE(SORT(UNIQUE(...)),11)`), quindi tagliare qui butterebbe via
     dati senza che il foglio mostri niente di piu'. Le sue formule leggono fino
     a riga 100000, cioe' circa 1800 settimane: non e' un limite che si incontra.
+
+    Intero nel numero di SETTIMANE, non di case type: quelli fuori dalla lista
+    curata restano nell'archivio e non entrano qui. Vedi `filtra_curati`.
     """
-    return [list(COLONNE)] + [r.as_row() for r in ordina(storico)]
+    tenute, _fuori = filtra_curati(storico, inclusi)
+    return [list(COLONNE)] + [r.as_row() for r in tenute]

@@ -14,12 +14,11 @@ Ordine, e perche':
      copia TEMPORANEA, mai out_path direttamente (`_scrivi_con_copia_atomica`):
      se un run va male a meta', out_path resta quello di prima.
   3. scrittura dei dataset nella copia temporanea.
-  3b. i due fogli DERIVATI ('AHT History', le righe nuove di 'Helper CaseType'):
-     non vengono da un file di input, si calcolano dai dati di SF_DATABASE
-     appena scritti. Vanno qui, dopo il punto 3 — perche' il resize di
-     `AHT_Data` deve essere gia' avvenuto — e prima del punto 4, perche'
-     'AHT Trend WoW' e 'CaseType Deepdive' sono tutte formule e devono
-     ricalcolare su questi valori, non su quelli della settimana precedente.
+  3b. il foglio DERIVATO ('AHT History'): non viene da un file di input, si
+     calcola dai dati di SF_DATABASE appena scritti. Va qui, dopo il punto 3 —
+     perche' il resize di `AHT_Data` deve essere gia' avvenuto — e prima del
+     punto 4, perche' 'AHT Trend WoW' e 'CaseType Deepdive' sono tutte formule e
+     devono ricalcolare su questi valori, non su quelli della settimana prima.
   4. ricalcolo completo. Le formule usano XLOOKUP/FILTER/UNIQUE in array e
      INDIRECT: volatili, un calculate() semplice non propaga sempre.
   5. macro malpractice, in modalita' silenziosa.
@@ -408,6 +407,7 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
         casetype_esclusi=settings.casetype_esclusi,
+        casetype_pesi=_casetype_pesi(contract, blocks),
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
         turni_rows=turni.rows if turni else None,
@@ -443,12 +443,34 @@ def _casetype_nuovi(contract: Contract, settings: Settings, blocks: dict):
     terne = _terne_sf(contract, blocks)
     if not terne:
         return None
-    from ..core.casetype import coppie_dai_dati, da_appendere
+    from ..core.casetype import coppie_dai_dati, fuori_lista
 
     esistenti = _read_casetype_helper(settings.template)
     if esistenti is None:
         return None
-    return da_appendere(esistenti, coppie_dai_dati((c, t) for c, t, _ in terne)) or None
+    return fuori_lista(esistenti, coppie_dai_dati((c, t) for c, t, _ in terne)) or None
+
+
+def _casetype_pesi(contract: Contract, blocks: dict) -> dict | None:
+    """`{(canale, case type): (volume, AHT medio)}` dai dati di questa settimana.
+
+    Serve alla segnalazione dei case type fuori dalla lista curata: dire che una
+    combinazione resta fuori senza dire quanti casi sono chiede una decisione
+    senza darne gli elementi. Nella W33 'Call Assignment' aveva 30 casi — e
+    'marginale' non e' una parola che si possa usare senza guardare il numero.
+
+    Si riusa `aggrega` con la settimana finta: e' lo stesso conteggio che finisce
+    nello storico, quindi i due numeri non possono divergere.
+    """
+    terne = _terne_sf(contract, blocks)
+    if not terne:
+        return None
+    from ..core.aht_history import aggrega
+
+    return {
+        (r.channel, r.case_type): (r.volume, r.aht)
+        for r in aggrega(terne, iso_year=0, week=0)
+    }
 
 
 def _read_casetype_helper(template) -> list[tuple[str, str]] | None:
@@ -790,7 +812,7 @@ def _settimana_storico(contract: Contract, blocks: dict, report: PreflightReport
 
 
 def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict, settimana):
-    """Storico AHT e case type nuovi: le due scritture che non vengono da un file.
+    """Lo storico AHT: la scrittura che non viene da un file di input.
 
     Se non si sa a che settimana appartengono i dati non si scrive niente e si
     dice perche': mettere gli aggregati sotto la settimana sbagliata
@@ -805,15 +827,15 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
     riuscito vorrebbe dire tenere aperto il file dello storico attraverso tutta
     la sequenza Excel, per proteggersi da un caso che non produce danni.
     """
-    from ..core.aht_history import aggrega, carica, righe_foglio, scrivi, unisci
-    from ..core.casetype import coppie_dai_dati, da_appendere
-    from .writer import (
-        FOGLIO_STORICO,
-        WriteResult,
-        append_helper_casetype,
-        leggi_coppie_helper,
-        write_aht_history,
+    from ..core.aht_history import (
+        aggrega,
+        carica,
+        filtra_curati,
+        righe_foglio,
+        scrivi,
+        unisci,
     )
+    from .writer import FOGLIO_STORICO, WriteResult, write_aht_history
 
     terne = _terne_sf(contract, blocks)
     if not terne:
@@ -836,18 +858,27 @@ def _scrivi_derivati(book, contract: Contract, settings: Settings, blocks: dict,
     nuove = aggrega(
         terne, iso_year=iso_year, week=week, esclusi=settings.casetype_esclusi
     )
+    # L'ARCHIVIO tiene tutto: e' l'unica cosa che non si ricostruisce.
     storico = unisci(carica(settings.aht_history), nuove)
     scrivi(settings.aht_history, storico)
 
-    out = [write_aht_history(book, righe_foglio(storico))]
-    out.append(append_helper_casetype(
-        book,
-        da_appendere(
-            leggi_coppie_helper(book),
-            coppie_dai_dati((c, t) for c, t, _ in terne),
-        ),
-    ))
-    return out
+    # La VISTA tiene la lista curata. Letta dal TEMPLATE offline, cioe' la stessa
+    # che il preflight ha usato per dire quali case type restano fuori: il
+    # rapporto e il risultato non possono raccontare due cose diverse.
+    curati = _read_casetype_helper(settings.template)
+    tenute, fuori = filtra_curati(storico, curati)
+    avvisi = []
+    if fuori:
+        avvisi.append(
+            f"{len(fuori)} combinazioni (canale, case type) sono nell'archivio ma "
+            f"NON nella lista curata di 'Helper CaseType', quindi non compaiono "
+            f"nelle heat map: "
+            + ", ".join(f"{c}|{t}" for c, t in fuori[:6])
+            + (f" (+{len(fuori) - 6})" if len(fuori) > 6 else "")
+            + ". Per farle comparire, aggiungile in fondo a 'Helper CaseType' nel "
+            "template: lo storico c'e' gia' tutto e ricompare per intero."
+        )
+    return [write_aht_history(book, righe_foglio(storico, curati), avvisi)]
 
 
 def build(
@@ -942,10 +973,10 @@ def build(
                     block = add_derived(dataset, block, offset or 0.0)
                 writes.append(write_block(book, contract, dataset, block))
 
-            # I fogli derivati, DOPO che SF_DATABASE e' stato scritto (e la
+            # Il foglio derivato, DOPO che SF_DATABASE e' stato scritto (e la
             # tabella AHT_Data ridimensionata dal suo write_block) e PRIMA del
-            # ricalcolo: 'AHT Trend WoW' e 'Helper CaseType' sono tutte formule,
-            # e devono ricalcolare su questi dati, non su quelli di prima.
+            # ricalcolo: 'AHT Trend WoW' e 'CaseType Deepdive' sono tutte
+            # formule, e devono ricalcolare su questi dati, non su quelli prima.
             writes.extend(
                 _scrivi_derivati(book, contract, settings, blocks, settimana_storico)
             )

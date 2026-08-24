@@ -199,6 +199,27 @@ def _check_template_sheets(rep: CheckReport, settings, contract) -> None:
             f"{len(opzionali)} fogli presenti",
         )
 
+    # I due fogli Only Cases non stanno in nessuno dei due gruppi sopra: nessun
+    # dataset li dichiara, perche' la pipeline non ci scrive dentro — si
+    # ricalcolano da `AT_DATASET`. Ma il preflight misura le loro capienze
+    # cercandoli per nome, e se non li trova quel controllo si salta SENZA DIRLO.
+    # Un controllo che sparisce in silenzio e' peggio di un controllo che non
+    # c'e': il preflight continua a rispondere OK. Qui si vede.
+    from ..core.onlycases import FOGLIO_DASHBOARD, FOGLIO_HELPER
+
+    oc = sorted({FOGLIO_HELPER, FOGLIO_DASHBOARD} - present)
+    if oc:
+        rep.add(
+            "fogli Only Cases", ATTENZIONE, f"assenti: {', '.join(oc)}",
+            "Non blocca: la pipeline non ci scrive dentro, si ricalcolano da\n"
+            "AT_DATASET. Ma senza di loro la sezione non compare nel report, e il\n"
+            "preflight smette di controllare se gli elenchi hanno posto — in\n"
+            "silenzio. Se il foglio e' stato solo rinominato, rinominalo com'era\n"
+            "(la settimana si legge dalle celle, non dal nome del foglio).",
+        )
+    else:
+        rep.add("fogli Only Cases", OK, "'OC Eventi' e la dashboard ci sono")
+
 
 def _check_vba(rep: CheckReport, settings) -> None:
     """`SetSilentMode` c'e'?

@@ -80,6 +80,37 @@ aht_history:
     - "Supplier Initiated Relocation"
     - "Supplier Initiated Traveler Contact"
 
+  # I case type che nello storico ci sono e nelle heat map NON si vogliono.
+  #
+  # PERCHE' SERVE UNA SECONDA LISTA, quando ce n'e' gia' una che dice cosa entra.
+  # Perche' la prima lista da sola non distingue due cose diverse: un case type
+  # nuovo che DEVE entrare e nessuno ci ha ancora pensato, e uno che si e' gia'
+  # deciso di tenere fuori. Il test `test_la_lista_delle_heatmap_copre_tutto_lo_storico`
+  # pretende che ogni case type dell'archivio stia in una delle due, quindi la
+  # prima settimana in cui ne arriva uno mai visto il test FALLISCE e chiede di
+  # decidere. Se gli esclusi non avessero un posto dove stare, l'unico modo di
+  # far tacere il test sarebbe farli entrare nelle heat map — cioe' la trappola
+  # si disarmerebbe da se'.
+  #
+  # NON E' `casetype_esclusi`, quello tolto il 2026-08-20. Quello filtrava
+  # l'ARCHIVIO, che era il posto sbagliato: un case type tenuto fuori dal CSV non
+  # ci rientrava piu' nemmeno cambiando idea, e il giorno in cui lo si aggiungeva
+  # alla lista compariva con un dato su dodici colonne. Questa filtra la VISTA:
+  # `data/aht_history.csv` continua a tenere tutto, e spostare un nome da qui a
+  # `casetype_heatmap` lo fa comparire con TUTTE le settimane che ha.
+  #
+  # Deciso il 2026-08-24, guardando i volumi della W33.
+  casetype_heatmap_esclusi:
+    # I quattro di 'Helper CaseType' che il 2026-08-20 erano gia' stati esclusi
+    # per nome: servono a 'CaseType Deepdive', non alle heat map. Qui c'e' solo
+    # quello che nella W33 ha avuto casi davvero.
+    - "Bulk Update Request"           # W33: 1 caso
+    # Arrivati con la W33, primo giro con l'archivio che tiene tutto.
+    - "Call Assignment"               # W33: 30 casi Phone, 3,8 min
+    - "Collections"                   # W33: 1 caso
+    - "Live Site Property Settings Issue"  # W33: 1 caso
+    - "Specialty Functions"           # W33: 8 casi
+
 # Come riconoscere i file in input/. Sono PATTERN, non nomi esatti: gli export
 # reali si chiamano "AT DATASET W31.xlsx", "SF DATABASE W31.csv" — il numero di
 # settimana e' nel nome e cambia ogni volta, e l'estensione dipende da chi

@@ -172,9 +172,50 @@ def test_i_case_type_fuori_dalle_heatmap_portano_i_numeri():
     (f,) = trova(rep, "case type fuori dalle heat map")
     # Per NOME: 'Call Assignment' e' una voce sola, con i due canali sommati.
     assert "2 case type" in f.summary and "33 casi in tutto" in f.summary
-    assert f.details == ["Call Assignment   32 casi", "Collections   1 casi"]
+    assert f.details == [
+        "Call Assignment   32 casi   <- MAI VISTO PRIMA",
+        "Collections   1 casi   <- MAI VISTO PRIMA",
+    ]
     # 'EVC' e' in lista: non compare.
     assert not any("EVC" in d for d in f.details)
+
+
+def test_i_gia_decisi_stanno_in_fondo_e_i_nuovi_si_vedono():
+    """La segnalazione che non cambia mai e' una segnalazione che si smette di leggere.
+
+    `casetype_heatmap_esclusi` elenca i case type su cui la decisione e' gia'
+    stata presa. Continuano a comparire — una scelta fatta a un caso alla
+    settimana va riguardata se diventano trenta — ma separati, altrimenti la prima
+    riga davvero nuova sparirebbe dentro un elenco che cresce e non cambia.
+    """
+    rep = check_sources(
+        casetype_heatmap=("EVC",),
+        casetype_heatmap_esclusi=("Collections", "Call Assignment"),
+        casetype_pesi={
+            ("Phone", "Call Assignment"): (30, 4.5),
+            ("Phone", "Collections"): (1, 12.0),
+            ("Phone", "Specialty Functions"): (8, 2.0),
+        },
+    )
+    (f,) = trova(rep, "case type fuori dalle heat map")
+    assert "di cui 1 mai visti prima" in f.summary
+    assert f.details == [
+        "Specialty Functions   8 casi   <- MAI VISTO PRIMA",
+        "gia' decisi (aht_history.casetype_heatmap_esclusi):",
+        "  Call Assignment   30 casi",
+        "  Collections   1 casi",
+    ]
+
+
+def test_se_sono_tutti_gia_decisi_non_si_annuncia_niente_di_nuovo():
+    rep = check_sources(
+        casetype_heatmap=("EVC",),
+        casetype_heatmap_esclusi=("Collections",),
+        casetype_pesi={("Phone", "Collections"): (1, 12.0)},
+    )
+    (f,) = trova(rep, "case type fuori dalle heat map")
+    assert "mai visti prima" not in f.summary
+    assert not any("MAI VISTO PRIMA" in d for d in f.details)
 
 
 def test_se_tutti_i_case_type_sono_in_lista_non_si_dice_niente():

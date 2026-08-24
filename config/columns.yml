@@ -49,21 +49,21 @@ datasets:
         role: input
         dtype: str
         aliases: ["agent_email", "Agent E-mail"]
-        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules"]
+        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules", "OC Eventi"]
         notes: "Chiave agente. Il VBA usa questa colonna per trovare l'ultima riga (End(xlUp) su B)."
       - canonical: "Agent State"
         target_col: F
         role: input
         dtype: str
         aliases: ["agent_state", "State"]
-        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules"]
+        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules", "OC Eventi", "Only Cases Dashboard"]
         notes: "Valori usati: Break, Available Cases, Login, Offline."
       - canonical: "Number of Active Contacts"
         target_col: H
         role: input
         dtype: float
         aliases: ["number_of_active_contacts", "Active Contacts"]
-        consumers: ["Verifica AHT"]
+        consumers: ["Verifica AHT", "OC Eventi"]
         notes: "ASSENTE dal piano §4 — trovata scansionando le formule di 'Verifica AHT'."
       - canonical: "Start Time"
         target_col: I
@@ -77,7 +77,7 @@ datasets:
         role: input
         dtype: float
         aliases: ["total_time_seconds", "Total Time (s)", "total_time_in_seconds"]
-        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules"]
+        consumers: ["Report Agenti", "Analisi Status", "Verifica AHT", "VBA:AddATRules", "OC Eventi"]
       - canonical: "Productive Aux Flag (Yes / No)"
         target_col: L
         role: input
@@ -89,13 +89,13 @@ datasets:
         target_col: P
         role: derived
         source: "Start Time"
-        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules"]
+        consumers: ["Report Agenti", "Analisi Status", "VBA:AddATRules", "OC Eventi", "Only Cases Dashboard"]
         formula: '=IF($I2="","",INT($I2+''Helper Malpractice''!$B$7/24))'
       - canonical: "Ora Milano"
         target_col: Q
         role: derived
         source: "Start Time"
-        consumers: ["VBA:AddATRules"]
+        consumers: ["VBA:AddATRules", "OC Eventi"]
         formula: '=IF($I2="","",($I2+''Helper Malpractice''!$B$7/24)-INT($I2+''Helper Malpractice''!$B$7/24))'
     # Offset fuso Seattle->Milano, in ore. Vive nel workbook: la pipeline lo
     # legge da qui e non lo duplica in settings.yml.
@@ -598,13 +598,13 @@ datasets:
         target_col: E
         role: input
         dtype: datetime
-        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts", "OC Eventi", "Only Cases Dashboard"]
         notes: "Dall'intestazione della colonna-giorno del roster."
       - canonical: "Stato"
         target_col: F
         role: input
         dtype: str
-        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts", "OC Eventi", "Only Cases Dashboard"]
         notes: >
           LAVORA se la cella contiene un turno, FERIE-OFF se contiene Off.
           La sorgente ha anche `Training` (28 celle) e `Flessibilità` (13):
@@ -614,13 +614,13 @@ datasets:
         target_col: G
         role: input
         dtype: float
-        consumers: ["Helper Turni", "VBA:LoadTurniStarts"]
+        consumers: ["Helper Turni", "VBA:LoadTurniStarts", "OC Eventi"]
         notes: "Primo HHMM della cella, come frazione di giorno."
       - canonical: "Fine turno"
         target_col: H
         role: input
         dtype: float
-        consumers: []
+        consumers: ["OC Eventi"]
         notes: >
           Nessuna formula e nessun VBA la legge: si scrive per fedeltà al
           foglio, non perché serva.
@@ -628,7 +628,7 @@ datasets:
         target_col: I
         role: input
         dtype: str
-        consumers: ["Helper Turni"]
+        consumers: ["Helper Turni", "OC Eventi", "Only Cases Dashboard"]
         notes: >
           Nome normalizzato con core.names.normalize_name, che replica la
           formula di `Helper Turni!P`. È la chiave di join di TUTTI i
@@ -652,7 +652,7 @@ datasets:
         target_col: A
         role: input
         dtype: str
-        consumers: ["VBA:LoadSlots"]
+        consumers: ["VBA:LoadSlots", "OC Eventi"]
         notes: >
           Nome normalizzato nello spazio di nomi del ROSTER (verificato: le 37
           chiavi del W30 coincidono con gli agenti HPO del roster, marcato
@@ -663,22 +663,22 @@ datasets:
         target_col: B
         role: input
         dtype: datetime
-        consumers: ["VBA:LoadSlots"]
+        consumers: ["VBA:LoadSlots", "OC Eventi", "Only Cases Dashboard"]
       - canonical: "Slot inizio"
         target_col: C
         role: input
         dtype: float
-        consumers: ["VBA:LoadSlots"]
+        consumers: ["VBA:LoadSlots", "OC Eventi"]
       - canonical: "Slot fine"
         target_col: D
         role: input
         dtype: float
-        consumers: ["VBA:LoadSlots"]
+        consumers: ["VBA:LoadSlots", "OC Eventi"]
       - canonical: "Stato BO"
         target_col: E
         role: input
         dtype: str
-        consumers: ["VBA:LoadSlots"]
+        consumers: ["VBA:LoadSlots", "OC Eventi"]
         notes: >
           BOT quando c'è uno slot orario, NO BOT quando la sorgente dice NO BOT.
           Il W30 non contiene MAI 'NO BOT' (il processo manuale lascia vuoto),

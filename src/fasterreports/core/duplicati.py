@@ -1,10 +1,10 @@
 """Gli "scaffali" dei fogli Duplicate Cases, e quanto ne serve ogni settimana.
 
-I tre fogli DC presentano elenchi in una forma che non ha nessun altro foglio del
-workbook: **l'elenco dei nomi e' un array dinamico** (`SORTBY(UNIQUE(FILTER(...)))`)
-che cresce da se', mentre **le colonne accanto** — il conteggio, la media, la
-percentuale — hanno una formula scritta riga per riga e si fermano dove le ha
-tirate chi ha fatto il foglio.
+I tre fogli DC presentano elenchi in una forma che il 2026-08-19 non aveva
+nessun altro foglio del workbook: **l'elenco dei nomi e' un array dinamico**
+(`SORTBY(UNIQUE(FILTER(...)))`) che cresce da se', mentre **le colonne accanto** —
+il conteggio, la media, la percentuale — hanno una formula scritta riga per riga
+e si fermano dove le ha tirate chi ha fatto il foglio.
 
 La conseguenza e' quella di sempre, e arriva da sola: il giorno in cui gli agenti
 coinvolti nei duplicati passano da 34 a 35, il trentacinquesimo compare
@@ -16,6 +16,10 @@ E' lo stesso difetto che 'Helper CaseType' aveva ad agosto, e si controlla nello
 stesso modo: si misura la capienza **dal template** (non si scrive qui: se domani
 tiri le formule piu' in basso, il controllo ti segue) e si confronta con quanti
 valori distinti ci sono davvero nei dati.
+
+Dal 2026-08-24 la forma comune sta in `core/capienze.py`, perche' i fogli della
+sezione Only Cases hanno lo stesso disegno e lo stesso difetto: qui restano gli
+scaffali dei fogli DC e il conteggio che li riguarda.
 
 MISURATO IL 2026-08-19 sull'export della W32 (178 duplicati, 28 agenti):
 
@@ -31,31 +35,8 @@ nei duplicati.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class Scaffale:
-    """Un elenco a capienza fissa in un foglio DC.
-
-    `sheet`/`col`/`prima_riga` dicono **dove misurare** la capienza: l'ultima riga
-    che in quella colonna ha una formula. `campo` dice **cosa contare** nei dati
-    per sapere quanto ne serve.
-    """
-
-    etichetta: str
-    sheet: str
-    col: str
-    prima_riga: int
-    # Il nome canonico del campo di DUP_DATASET di cui contare i valori distinti.
-    # `None` per gli scaffali che si contano in un altro modo (vedi `conteggi`).
-    campo: str | None
-    nota: str = ""
-
-    @property
-    def punto(self) -> tuple[str, str, int]:
-        return (self.sheet, self.col, self.prima_riga)
-
+from .capienze import Scaffale
+from .capienze import punti_da_misurare as _punti
 
 # Le colonne elencate sono quelle da TIRARE PIU' IN BASSO quando la capienza
 # finisce; la prima di ciascun gruppo e' quella che si misura (le altre dello
@@ -125,7 +106,7 @@ SPILL_ORIGIN_CAPIENZA = 15
 
 def punti_da_misurare() -> tuple[tuple[str, str, int], ...]:
     """Gli argomenti per `templatescan.scan_formula_extent`."""
-    return tuple(s.punto for s in SCAFFALI)
+    return _punti(SCAFFALI)
 
 
 def conteggi(righe: list[list], offset: dict[str, int]) -> dict[str, int]:

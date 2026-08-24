@@ -91,6 +91,43 @@ nell'elenco senza nessun numero accanto, senza alcun errore. Quando l'avviso
 arriva, le formule vanno tirate più in basso — le colonne esatte sono in
 `docs/piano-duplicates.md` §4.3.
 
+### La sezione Only Cases
+
+Due fogli, arrivati nel template il 21 agosto, che **non hanno un file in
+ingresso**: si ricalcolano da `AT_DATASET`, cioè da un export che scarichi già.
+
+- `OC Eventi` — l'helper: un evento `Available Cases` per riga, con accanto il
+  turno e lo slot di back office di quel giorno, e quindi quanti secondi cadono
+  dentro e quanti fuori;
+- `Only Cases Dashboard` — la vista: ore per agente, quante dentro lo slot BO e
+  quante fuori. Le ore fuori sono la malpractice che la sezione serve a vedere.
+
+Non c'è niente da preparare e niente che possa mancare: se `AT_DATASET` c'è, la
+sezione c'è. Tre cose però conviene saperle.
+
+**Il nome del foglio non porta la settimana.** Nasceva come `Only Cases W33`, ed
+è stato rinominato apposta. Excel se la cava con un rename — aggiorna da sé le
+formule — ma il programma cerca il foglio *per nome* per controllarne le
+capienze, e dopo un rename smetterebbe di trovarlo **senza dirlo**: il preflight
+continuerebbe a rispondere OK. La settimana si legge dalle celle `B6`/`B7` della
+dashboard, che si ricalcolano dai dati. Se lo rinomini, `omni-report check` te lo
+dice.
+
+**Gli elenchi hanno un massimo: 3 000 eventi e 60 agenti.** Il foglio se ne
+accorge da solo (le celle `C8` e `C9` dicono «ATTENZIONE: capienza … esaurita»),
+e il preflight te lo anticipa **all'80%**, prima che il posto finisca. È lo stesso
+difetto dei fogli DC: la voce in eccesso comparirebbe nell'elenco senza nessun
+numero accanto, e senza un solo errore. Nella W30 eri a 1 386 eventi su 3 000 e
+33 agenti su 60. Quando l'avviso arriva, le formule vanno tirate più in basso —
+le colonne esatte sono in `src\fasterreports\core\onlycases.py`.
+
+**Legge `AT_DATASET` fino a riga 130 000, come il resto del report.** Era nato a
+60 000, e non era un dettaglio: il preflight prende sempre il limite *più stretto*
+di tutto il workbook, quindi un foglio nuovo può dimezzare il margine di tutto il
+report. Corretto con `python tools\patch_template_only_cases.py`, che fa anche il
+rename. Se un domani il template venisse rifatto da un export nuovo, quello
+strumento le rimette entrambe.
+
 Le due cose che rendono il programma più affidabile del copia-incolla:
 
 - **Le colonne si cercano per nome, non per posizione.** Se un export sposta una
@@ -422,6 +459,27 @@ allargare quando la segnalazione compare, non quando i numeri sono già sbagliat
 Se il limite e' già superato la riga diventa `[BLOCCA] formule troppo corte`, ed
 elenca quali formule vanno allargate.
 
+### `posto quasi finito per <elenco>`
+Lo stesso guasto dell'altro, ma sugli **elenchi** invece che sugli intervalli.
+Riguarda i tre fogli `DC ...` della sezione Duplicate Cases e i due della sezione
+Only Cases: in tutti e cinque l'elenco dei nomi cresce da sé (è una formula ad
+array dinamico) mentre le colonne accanto — il conteggio, la media, la
+percentuale — sono tirate fino a una riga fissa.
+
+Quindi la voce in eccesso **compare nell'elenco senza nessun numero accanto**.
+Non `#SPILL!`, non `#REF!`: la cella accanto è vuota, come lo era prima. Presente
+e invisibile insieme.
+
+La riga dice quanti ce ne sono e quanti ce ne stanno (`51 su 60 (85%)`). Il
+rimedio è tirare le formule più in basso nel foglio; il messaggio ti dice dove
+sono scritte le colonne esatte — `docs\piano-duplicates.md` §4.3 per i fogli DC,
+`src\fasterreports\core\onlycases.py` per Only Cases. La capienza viene **misurata
+dal template**: appena le tiri, il controllo se ne accorge da solo, senza toccare
+niente in `config\`.
+
+Se il posto è già finito la riga diventa `[BLOCCA] posto finito per <elenco>`, e
+dice quante voci si perderebbero.
+
 ### `settimana dedotta dai dati` / `settimana scelta`
 Conferme. La seconda dice anche quante righe di `AT_DATASET` cadono dentro la
 settimana: devono essere tutte.
@@ -465,6 +523,20 @@ ricostruisce. Il filtro agisce solo su cosa si *vede*.
 
 Quindi se un giorno uno di questi ti interessa, aggiungilo alla lista e rilancia:
 comparirà con **tutte** le settimane che l'archivio ha, non solo da quel momento.
+
+**Le liste sono due, e servono tutte e due.** Accanto a `casetype_heatmap` c'è
+`casetype_heatmap_esclusi`: i tipi di caso che nell'archivio ci sono e che si è
+*deciso* di tenere fuori dalle heat map. Sembra una ripetizione e non lo è —
+serve a distinguere due cose diverse: un tipo di caso nuovo a cui nessuno ha
+ancora pensato, e uno su cui la decisione è già stata presa. Un test pretende che
+ogni tipo di caso dell'archivio stia in una delle due, quindi la prima settimana
+che ne porta uno mai visto **il test fallisce e chiede di decidere**. Senza la
+lista degli esclusi, l'unico modo di farlo tacere sarebbe farli entrare tutti
+nelle heat map: la trappola si disarmerebbe da sé.
+
+Nella W33 sono finiti fra gli esclusi `Call Assignment` (30 casi),
+`Specialty Functions` (8) e tre tipi da un caso. Spostarne uno nell'altra lista è
+una riga da cambiare in `config\settings.yml`.
 
 ### `date ambigue in <fonte>!<colonna>`
 Una colonna di date che si legge in due modi: `8/10/2026` è il 10 agosto per un
@@ -710,6 +782,7 @@ Tutto quello che sta in `config\`. Sono file di testo: aprili con Notepad.
 | `sources.backoffice_sheet` | quale foglio nel back office (`Only Cases Shifts`) |
 | `paths.aht_history` | dove sta lo storico del trend (`data/aht_history.csv`) |
 | `aht_history.casetype_heatmap` | i tipi di caso che si **vedono** nelle heat map di `AHT Trend WoW`. Sono i 27 del file legacy. Aggiungerne uno lo fa comparire con tutte le settimane che `data\aht_history.csv` ha; togliere una riga lo nasconde senza perdere niente |
+| `aht_history.casetype_heatmap_esclusi` | i tipi di caso che nell'archivio ci sono e che si è deciso di **non** far vedere. Non filtra niente da solo: serve a distinguere «tenuto fuori apposta» da «nuovo, e nessuno ci ha ancora pensato». Un nome non può stare in tutte e due le liste — se ci finisce, il programma si ferma e lo dice |
 | `output.workbook_name` | come si chiama il file prodotto |
 | `validation.max_uncoercible_ratio` | quanti valori illeggibili tollerare per colonna (0.02 = 2%) |
 | `excel.visible` | mostrare sempre Excel |

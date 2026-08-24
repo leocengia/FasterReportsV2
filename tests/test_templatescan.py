@@ -187,14 +187,22 @@ def test_il_template_reale_ha_i_limiti_che_conosciamo():
     )
     vinc = {ds: l.max_row for ds, l in binding_limits(lims).items()}
 
-    # ATwi e Slot Only Cases sono letti solo per colonna intera o dal VBA:
-    # nessun limite, ed e' la situazione da preferire.
+    # ATwi e' letto solo per colonna intera o dal VBA: nessun limite, ed e' la
+    # situazione da preferire.
     assert "ATwi_DATASET" not in vinc
-    assert "Slot Only Cases" not in vinc
 
     assert vinc["AT_DATASET"] == 130000
-    assert vinc["Turni"] == 10000
     assert vinc["PSAT_DATASET"] == 1000
+
+    # 'Slot Only Cases' e 'Turni' hanno guadagnato un limite il 2026-08-21, con
+    # l'arrivo di 'OC Eventi': prima il primo non ne aveva nessuno (lo leggeva
+    # solo il VBA) e il secondo si fermava a 10000. Non e' un peggioramento da
+    # correggere subito — 1291 righe di back office su 2000 e 252 di roster su
+    # 5000 — ma e' un fatto nuovo, e questa fotografia serve a non scoprirlo da
+    # una settimana piena. Allargarli vorrebbe dire riscrivere le ~72 000 formule
+    # per riga di 'OC Eventi': si fara' quando il preflight segnalera' l'80%.
+    assert vinc["Slot Only Cases"] == 2000
+    assert vinc["Turni"] == 5000
 
     # SF_DATABASE e' stato per mesi il limite piu' stretto del template: 3389,
     # imposto dalle formule a riga fissa di 'Profilo Colonne SF' (un foglio

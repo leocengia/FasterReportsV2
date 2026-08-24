@@ -95,6 +95,25 @@ def test_template_reale_struttura_ok_ma_patch_mancante(contract, settings):
 
 
 @pytest.mark.skipif(not SAMPLE.is_file(), reason="campione W30 assente")
+def test_un_template_senza_i_fogli_only_cases_lo_dice(contract, settings):
+    """Il W30 e' anteriore alla sezione: e' il caso reale di un template che non ce l'ha.
+
+    Serve perche' il preflight misura le capienze dei due fogli cercandoli per
+    nome, e se non li trova salta il controllo SENZA dirlo. Un template piu'
+    vecchio deve restare usabile — quindi ATTENZIONE e non MANCA — ma chi lancia
+    il build deve poterlo leggere da qualche parte.
+    """
+    c = _check(_run(contract, settings, SAMPLE), "fogli Only Cases")
+    assert c.status == ATTENZIONE
+    assert "OC Eventi" in c.detail
+
+
+def test_il_template_tracciato_ha_i_fogli_only_cases(contract, settings):
+    c = _check(_run(contract, settings, settings.template), "fogli Only Cases")
+    assert c.status == OK
+
+
+@pytest.mark.skipif(not SAMPLE.is_file(), reason="campione W30 assente")
 def test_alias_e_email_letti_dal_template(contract, settings):
     rep = _run(contract, settings, SAMPLE)
     assert "7 alias" in _check(rep, "tabella alias").detail

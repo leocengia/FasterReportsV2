@@ -403,10 +403,13 @@ def _run_coherence(contract, settings, report, blocks, ctx):
         dup_closed=dup_closed,
         dup_capienze=_dup_capienze(settings),
         dup_conteggi=_dup_conteggi(contract, blocks),
+        oc_capienze=_oc_capienze(settings),
+        oc_conteggi=_oc_conteggi(contract, settings, blocks),
         column_stats={n: b.stats for n, b in blocks.items() if b.stats},
         date_viewpoint=date_viewpoint,
         casetype_nuovi=_casetype_nuovi(contract, settings, blocks),
         casetype_heatmap=settings.casetype_heatmap,
+        casetype_heatmap_esclusi=settings.casetype_heatmap_esclusi,
         casetype_pesi=_casetype_pesi(contract, blocks),
         roster_notes=ctx.get("roster_notes"),
         backoffice_notes=ctx.get("backoffice_notes"),
@@ -568,6 +571,7 @@ def _dup_capienze(settings: Settings) -> dict[str, int] | None:
     """
     if not settings.template.is_file():
         return None
+    from ..core.capienze import capienze
     from ..core.duplicati import SCAFFALI, SPILL_ORIGIN, SPILL_ORIGIN_CAPIENZA, punti_da_misurare
     from ..core.templatescan import scan_formula_extent
 
@@ -575,11 +579,7 @@ def _dup_capienze(settings: Settings) -> dict[str, int] | None:
         estensioni = scan_formula_extent(settings.template, punti_da_misurare())
     except PipelineError:
         return None
-    out = {
-        s.etichetta: estensioni[(s.sheet, s.col)] - s.prima_riga + 1
-        for s in SCAFFALI
-        if (s.sheet, s.col) in estensioni
-    }
+    out = capienze(SCAFFALI, estensioni)
     # Lo spill del menu Origin non e' una formula per riga: la sua capienza e' lo
     # spazio fra dove parte e cio' che lo blocca. Vive nel modulo, con la nota.
     out[SPILL_ORIGIN.etichetta] = SPILL_ORIGIN_CAPIENZA
@@ -598,6 +598,57 @@ def _dup_conteggi(contract: Contract, blocks: dict) -> dict[str, int] | None:
     start = col_to_index(ds.data_start_col)
     offset = {f.canonical: f.target_index - start for f in ds.input_fields}
     return conteggi(block.rows, offset) or None
+
+
+def _oc_capienze(settings: Settings) -> dict[str, int] | None:
+    """La capienza degli elenchi della sezione Only Cases, letta dal template."""
+    if not settings.template.is_file():
+        return None
+    from ..core.capienze import capienze
+    from ..core.onlycases import SCAFFALI, punti_da_misurare
+    from ..core.templatescan import scan_formula_extent
+
+    try:
+        estensioni = scan_formula_extent(settings.template, punti_da_misurare())
+    except PipelineError:
+        return None
+    return capienze(SCAFFALI, estensioni) or None
+
+
+def _oc_stato(settings: Settings) -> str:
+    """Lo stato agente che i fogli Only Cases considerano "only cases".
+
+    Sta in una cella della dashboard, e si legge da li' invece di scriverlo nel
+    codice: e' il parametro del foglio, e chi lo cambia in Excel deve ottenere che
+    il conteggio cambi con lui. Se il foglio non si lascia leggere si usa il
+    valore che c'e' dal primo giorno — meglio contare sullo stato giusto per
+    default che saltare il controllo.
+    """
+    from ..core.onlycases import CELLA_STATO, FOGLIO_DASHBOARD, STATO_DI_DEFAULT
+
+    try:
+        from ..core.xlsxsource import read_sheet
+
+        sheet = read_sheet(settings.template, FOGLIO_DASHBOARD)
+    except PipelineError:
+        return STATO_DI_DEFAULT
+    col, riga = CELLA_STATO
+    valore = sheet.cell(col, riga)
+    return str(valore).strip() if valore and str(valore).strip() else STATO_DI_DEFAULT
+
+
+def _oc_conteggi(contract: Contract, settings: Settings, blocks: dict) -> dict[str, int] | None:
+    """Quanto la settimana chiede agli elenchi della sezione Only Cases."""
+    block = blocks.get("AT_DATASET")
+    if not block or not block.rows:
+        return None
+    from ..core.contract import col_to_index
+    from ..core.onlycases import conteggi
+
+    ds = contract.dataset("AT_DATASET")
+    start = col_to_index(ds.data_start_col)
+    offset = {f.canonical: f.target_index - start for f in ds.input_fields}
+    return conteggi(block.rows, offset, _oc_stato(settings)) or None
 
 
 def _last_rows(contract: Contract, blocks: dict) -> dict[str, int]:

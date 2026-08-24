@@ -392,18 +392,23 @@
     "AT_DATASET": {
       "B": [
         "Analisi Status",
+        "OC Eventi",
         "Report Agenti",
         "Verifica AHT"
       ],
       "F": [
         "Analisi Status",
+        "OC Eventi",
+        "Only Cases Dashboard",
         "Report Agenti"
       ],
       "H": [
+        "OC Eventi",
         "Verifica AHT"
       ],
       "K": [
         "Analisi Status",
+        "OC Eventi",
         "Report Agenti",
         "Verifica AHT"
       ],
@@ -414,7 +419,12 @@
       ],
       "P": [
         "Analisi Status",
+        "OC Eventi",
+        "Only Cases Dashboard",
         "Report Agenti"
+      ],
+      "Q": [
+        "OC Eventi"
       ]
     },
     "ATwi_DATASET": {
@@ -515,19 +525,46 @@
         "Helper Turni"
       ],
       "E": [
-        "Helper Turni"
+        "Helper Turni",
+        "OC Eventi",
+        "Only Cases Dashboard"
       ],
       "F": [
-        "Helper Turni"
+        "Helper Turni",
+        "OC Eventi",
+        "Only Cases Dashboard"
       ],
       "G": [
-        "Helper Turni"
+        "Helper Turni",
+        "OC Eventi"
+      ],
+      "H": [
+        "OC Eventi"
       ],
       "I": [
-        "Helper Turni"
+        "Helper Turni",
+        "OC Eventi",
+        "Only Cases Dashboard"
       ]
     },
-    "Slot Only Cases": {},
+    "Slot Only Cases": {
+      "A": [
+        "OC Eventi"
+      ],
+      "B": [
+        "OC Eventi",
+        "Only Cases Dashboard"
+      ],
+      "C": [
+        "OC Eventi"
+      ],
+      "D": [
+        "OC Eventi"
+      ],
+      "E": [
+        "OC Eventi"
+      ]
+    },
     "DUP_DATASET": {
       "B": [
         "Duplicates Helper"

@@ -444,7 +444,9 @@ def test_la_lista_delle_heatmap_copre_tutto_lo_storico():
     if not (cfg.is_file() and csv_path.is_file()):
         pytest.skip("config o storico assenti")
 
-    ammessi = {c.strip() for c in load_settings(cfg).casetype_heatmap}
+    settings = load_settings(cfg)
+    ammessi = {c.strip() for c in settings.casetype_heatmap}
+    esclusi = {c.strip() for c in settings.casetype_heatmap_esclusi}
     assert len(ammessi) >= 20, f"lista sospettosamente corta: {len(ammessi)}"
     assert "Rates & Inventory Changes" in ammessi, (
         "il nome con la & non e' arrivato intero: il filtro butterebbe via un "
@@ -454,13 +456,19 @@ def test_la_lista_delle_heatmap_copre_tutto_lo_storico():
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
         storico = {r["case_type"].strip() for r in csv.DictReader(f)}
 
-    fuori = sorted(storico - ammessi)
-    assert not fuori, (
-        f"{len(fuori)} case type dello storico NON sono in "
-        f"aht_history.casetype_heatmap: applicando il filtro sparirebbero dalle "
-        f"heat map.\n"
-        f"  {fuori}\n"
-        f"  Se e' voluto, va detto qui; se non lo e', vanno aggiunti alla lista."
+    # Ogni case type dell'archivio dev'essere stato GUARDATO: o si vede nelle heat
+    # map, o si e' deciso di tenerlo fuori. Quello che non deve succedere e' che
+    # ne arrivi uno nuovo e nessuno se ne accorga — sparirebbe dalla vista senza
+    # che nessuno l'abbia deciso. Per questo il test fallisce alla prima settimana
+    # che ne porta uno inedito: e' il momento in cui la decisione va presa.
+    ignoti = sorted(storico - ammessi - esclusi)
+    assert not ignoti, (
+        f"{len(ignoti)} case type dello storico non sono in nessuna delle due "
+        f"liste di aht_history:\n"
+        f"  {ignoti}\n"
+        f"  Vanno in `casetype_heatmap` se li vuoi nelle heat map, in\n"
+        f"  `casetype_heatmap_esclusi` se non li vuoi. L'archivio li tiene\n"
+        f"  comunque: la scelta riguarda solo cosa si vede."
     )
 
 

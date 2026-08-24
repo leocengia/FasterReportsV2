@@ -97,10 +97,13 @@ def check_sources(
     date_viewpoint: list | None = None,
     casetype_nuovi: list[tuple[str, str]] | None = None,
     casetype_heatmap: tuple[str, ...] = (),
+    casetype_heatmap_esclusi: tuple[str, ...] = (),
     casetype_pesi: dict | None = None,
     dup_closed: list | None = None,
     dup_capienze: dict[str, int] | None = None,
     dup_conteggi: dict[str, int] | None = None,
+    oc_capienze: dict[str, int] | None = None,
+    oc_conteggi: dict[str, int] | None = None,
 ) -> CoherenceReport:
     """Esegue i controlli su ciò che i lettori hanno prodotto.
 
@@ -149,11 +152,15 @@ def check_sources(
     if casetype_nuovi:
         _check_casetype_nuovi(rep, casetype_nuovi, casetype_pesi)
     if casetype_heatmap and casetype_pesi:
-        _check_casetype_fuori_heatmap(rep, casetype_heatmap, casetype_pesi)
+        _check_casetype_fuori_heatmap(
+            rep, casetype_heatmap, casetype_pesi, casetype_heatmap_esclusi
+        )
     if dup_closed:
         _check_settimana_duplicati(rep, dup_closed, week_inferred)
     if dup_capienze and dup_conteggi:
-        _check_capienze_duplicati(rep, dup_capienze, dup_conteggi)
+        _check_capienze(rep, dup_capienze, dup_conteggi, RIMEDIO_DUPLICATI)
+    if oc_capienze and oc_conteggi:
+        _check_capienze(rep, oc_capienze, oc_conteggi, RIMEDIO_ONLY_CASES)
 
     if week_inferred is not None:
         _check_week_declared(rep, week_declared, week_inferred)
@@ -463,7 +470,9 @@ def _check_casetype_nuovi(rep, nuovi: list[tuple[str, str]], pesi=None) -> None:
     ))
 
 
-def _check_casetype_fuori_heatmap(rep, ammessi: tuple[str, ...], pesi: dict) -> None:
+def _check_casetype_fuori_heatmap(
+    rep, ammessi: tuple[str, ...], pesi: dict, esclusi: tuple[str, ...] = ()
+) -> None:
     """Case type nei dati che non sono nella lista delle heat map.
 
     Non entrano nel trend, ed e' voluto: le heat map di 'AHT Trend WoW' devono
@@ -473,11 +482,19 @@ def _check_casetype_fuori_heatmap(rep, ammessi: tuple[str, ...], pesi: dict) -> 
 
     Ma "non entrano" non deve voler dire "non si sanno": sono casi veri, lavorati
     da persone vere, e restano tutti in `data/aht_history.csv`. Quindi qui si
-    dicono con VOLUME e AHT — che e' cio' che serve per decidere se sono marginali
+    dicono con VOLUME — che e' cio' che serve per decidere se sono marginali
     davvero. Nella W33 'Call Assignment' aveva 30 casi, e 'marginale' non e' una
     parola che si possa usare senza guardare il numero.
+
+    I DUE GRUPPI SONO SEPARATI, e serve. `casetype_heatmap_esclusi` elenca quelli
+    su cui la decisione e' gia' stata presa: continuano a comparire, con il loro
+    volume, perche' una decisione presa a un caso alla settimana va riguardata se
+    diventano trenta. Ma mescolarli ai nuovi renderebbe la segnalazione una lista
+    che cresce e non cambia mai — cioe' qualcosa che si impara a saltare, e la
+    prima riga nuova ci sparirebbe dentro.
     """
     dentro = {str(c).strip().casefold() for c in ammessi}
+    gia_decisi = {str(c).strip().casefold() for c in esclusi}
     # Per NOME, non per coppia: la lista delle heat map e' per nome, e dire due
     # volte lo stesso case type (una per canale) sarebbe rumore.
     fuori: dict[str, list[int]] = {}
@@ -489,17 +506,26 @@ def _check_casetype_fuori_heatmap(rep, ammessi: tuple[str, ...], pesi: dict) -> 
         return
 
     totali = {ct: sum(v) for ct, v in fuori.items()}
-    dettagli = [
-        f"{ct}   {tot} casi"
-        for ct, tot in sorted(totali.items(), key=lambda kv: -kv[1])
-    ]
+    per_volume = sorted(totali.items(), key=lambda kv: -kv[1])
+    nuovi = [(ct, t) for ct, t in per_volume if ct.strip().casefold() not in gia_decisi]
+    noti = [(ct, t) for ct, t in per_volume if ct.strip().casefold() in gia_decisi]
+
+    dettagli = [f"{ct}   {tot} casi   <- MAI VISTO PRIMA" for ct, tot in nuovi]
+    if noti:
+        dettagli.append("gia' decisi (aht_history.casetype_heatmap_esclusi):")
+        dettagli += [f"  {ct}   {tot} casi" for ct, tot in noti]
+
+    summary = (
+        f"{len(fuori)} case type nei dati non sono in "
+        f"aht_history.casetype_heatmap — {sum(totali.values())} casi in tutto"
+    )
+    if nuovi and noti:
+        summary += f", di cui {len(nuovi)} mai visti prima"
+
     rep.add(Finding(
         check="case type fuori dalle heat map",
         level=SEGNALA,
-        summary=(
-            f"{len(fuori)} case type nei dati non sono in "
-            f"aht_history.casetype_heatmap — {sum(totali.values())} casi in tutto"
-        ),
+        summary=summary,
         details=dettagli,
         hint=(
             "Non compaiono nelle heat map di 'AHT Trend WoW'. E' voluto: quelle\n"
@@ -508,7 +534,9 @@ def _check_casetype_fuori_heatmap(rep, ammessi: tuple[str, ...], pesi: dict) -> 
             "I dati NON sono persi: stanno tutti in data/aht_history.csv.\n"
             "Se uno ti interessa, aggiungilo a aht_history.casetype_heatmap in\n"
             "config/settings.yml e rilancia: comparira' con TUTTE le settimane che\n"
-            "l'archivio ha, non solo da adesso.\n"
+            "l'archivio ha, non solo da adesso. Se invece va tenuto fuori, mettilo\n"
+            "in aht_history.casetype_heatmap_esclusi: da li' in poi comparira' fra i\n"
+            "'gia' decisi' invece che fra i nuovi.\n"
             "Guarda il numero di casi prima di decidere: e' il solo modo di sapere se\n"
             "'marginale' e' vero."
         ),
@@ -728,18 +756,34 @@ def _check_settimana_duplicati(rep, closed: list, week_inferred) -> None:
     ))
 
 
-def _check_capienze_duplicati(rep, capienze: dict[str, int], conteggi: dict[str, int]) -> None:
-    """Gli elenchi dei fogli DC hanno posto per quello che c'e' nei dati?
+RIMEDIO_DUPLICATI = (
+    "Rimedio: tira le formule piu' in basso nel foglio (vedi\n"
+    "docs/piano-duplicates.md §4.3 per le colonne esatte)."
+)
+RIMEDIO_ONLY_CASES = (
+    "Rimedio: tira le formule piu' in basso nel foglio (le colonne\n"
+    "esatte sono nella `nota` di ciascuno scaffale, in core/onlycases.py)."
+)
 
-    Gli elenchi sono array dinamici e crescono da se'; le colonne accanto (il
-    conteggio, la media, la percentuale) hanno una formula per riga e si fermano
-    dove sono state tirate. La voce in eccesso compare **senza nessun numero
-    accanto**: presente e invisibile insieme, senza un solo errore. E' lo stesso
-    difetto tolto a 'Helper CaseType' ad agosto.
+
+def _check_capienze(
+    rep, capienze: dict[str, int], conteggi: dict[str, int], rimedio: str
+) -> None:
+    """Gli elenchi a capienza fissa hanno posto per quello che c'e' nei dati?
+
+    Vale per i tre fogli DC e per i due della sezione Only Cases: hanno lo stesso
+    disegno, quindi lo stesso difetto. Gli elenchi sono array dinamici e crescono
+    da se'; le colonne accanto (il conteggio, la media, la percentuale) hanno una
+    formula per riga e si fermano dove sono state tirate. La voce in eccesso
+    compare **senza nessun numero accanto**: presente e invisibile insieme, senza
+    un solo errore. E' lo stesso difetto tolto a 'Helper CaseType' ad agosto.
 
     Come per i limiti di riga, non si aspetta il superamento: si SEGNALA all'80%,
     cosi' le formule si tirano quando c'e' tempo e non nella settimana in cui i
     numeri sono gia' incompleti.
+
+    `rimedio` dice dove sono scritte le colonne da tirare: cambia da sezione a
+    sezione, ed e' l'unica cosa che cambia.
     """
     for etichetta, servono in sorted(conteggi.items()):
         capienza = capienze.get(etichetta)
@@ -754,8 +798,7 @@ def _check_capienze_duplicati(rep, capienze: dict[str, int], conteggi: dict[str,
                     f"Le {servono - capienza} voci in eccesso comparirebbero nell'elenco\n"
                     "senza nessun numero accanto: nessun errore, solo celle vuote\n"
                     "dove dovrebbe esserci un conteggio.\n"
-                    "Rimedio: tira le formule piu' in basso nel foglio (vedi\n"
-                    "docs/piano-duplicates.md §4.3 per le colonne esatte).\n"
+                    f"{rimedio}\n"
                     "La capienza viene letta dal template, quindi appena le tiri\n"
                     "questo controllo se ne accorge da solo."
                 ),

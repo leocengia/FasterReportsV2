@@ -54,6 +54,11 @@ class Settings:
     # map del file legacy e sulle 11 settimane di storico curate a mano, non
     # scelta a tavolino.
     casetype_heatmap: tuple[str, ...] = ()
+    # I case type che nell'archivio ci sono e nelle heat map si e' deciso di NON
+    # far entrare. Non filtra niente in produzione: e' la meta' che manca alla
+    # domanda «ogni case type dello storico e' stato guardato?», e senza di lei
+    # l'unico modo di far tacere il test sarebbe far entrare tutto.
+    casetype_heatmap_esclusi: tuple[str, ...] = ()
     input_files: dict[str, str] = field(default_factory=dict)
     workbook_name: str = "Omni_Report_W{week}.xlsm"
     preflight_name: str = "preflight_W{week}.txt"
@@ -203,6 +208,33 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
             "  Togli la chiave vecchia; se ti serve la lista, e' nel repository."
         )
 
+    # Un nome in tutte e due le liste non e' una svista da correggere in silenzio:
+    # e' una decisione che si contraddice, e le due liste servono proprio a dire
+    # che la decisione e' stata presa. Chi legge il file non saprebbe quale vale.
+    _dentro = set(
+        _str_tuple(
+            (raw.get("aht_history") or {}).get("casetype_heatmap"),
+            "aht_history.casetype_heatmap",
+        )
+        or ()
+    )
+    _fuori = set(
+        _str_tuple(
+            (raw.get("aht_history") or {}).get("casetype_heatmap_esclusi"),
+            "aht_history.casetype_heatmap_esclusi",
+        )
+        or ()
+    )
+    if _dentro & _fuori:
+        raise ContractError(
+            "settings.yml: questi case type sono sia in `casetype_heatmap` sia in "
+            "`casetype_heatmap_esclusi`:\n"
+            + "".join(f"    {c}\n" for c in sorted(_dentro & _fuori))
+            + "  Le due liste dicono il contrario l'una dell'altra: la prima cosa\n"
+            "  si vede nelle heat map, la seconda cosa si e' deciso di tenerne\n"
+            "  fuori. Tienilo in una sola."
+        )
+
     mode = str(derived.get("mode", "formula"))
     if mode not in ("formula", "python"):
         raise ContractError(f"settings.yml: derived.mode={mode!r} non valido (formula|python).")
@@ -251,6 +283,10 @@ def load_settings(path: str | Path, *, root: Path | None = None) -> Settings:
         casetype_heatmap=_str_tuple(
             (raw.get("aht_history") or {}).get("casetype_heatmap"),
             "aht_history.casetype_heatmap",
+        ) or (),
+        casetype_heatmap_esclusi=_str_tuple(
+            (raw.get("aht_history") or {}).get("casetype_heatmap_esclusi"),
+            "aht_history.casetype_heatmap_esclusi",
         ) or (),
         input_files=dict(raw.get("input_files") or {}),
         workbook_name=str(out.get("workbook_name", "Omni_Report_W{week}.xlsm")),

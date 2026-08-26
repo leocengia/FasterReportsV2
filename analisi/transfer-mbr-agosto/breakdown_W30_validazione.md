@@ -33,6 +33,8 @@ Le due gambe sono righe diverse dello stesso export, senza chiave che le collegh
     - `misrouted`: 2
 - soglia `aht_basso` (10° percentile dei transfer): 0.60 min
 - casi padre con piu' di un transfer figlio (bounce): 12
+- **campione da marcare a mano: 103** su 139 (74%) — alto rischio al 100% piu' un casuale stratificato per case type, per ±5% al 95%
+- NOTA: mancano solo **36** casi al 100% di copertura. A questi volumi conviene scrubbare tutto: la mail cita Legazpi proprio come esempio di sito al 100%, e un campione va spiegato mentre il 100% no.
 
 ## Controllo per case type
 

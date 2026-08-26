@@ -38,11 +38,11 @@ same source:
    *landed*, inferred from the receiving case, not a routing decision recorded at transfer time.
 2. **The two legs do not reconcile.** The ceding leg (`case_status = "Closed - Transferred"`,
    or `Case Resolution Category = "Case Transfer"`) and the receiving leg are different rows
-   with no key linking them. In our reference week the ceding leg counted 64 cases and the
+   with no key linking them. In week 34 the ceding leg counted 72 cases and the
    receiving leg 139. Both are reported; they are not the same population and the difference
    is not an error.
 3. **Voice-to-voice call transfers are a separate population.**
-   `Case Resolution Category = "Call Transfer"` (76 cases in the reference week) always
+   `Case Resolution Category = "Call Transfer"` (33 cases in week 34) always
    carries `work_function = Call Assignment`, so it has no Advanced/Basic destination and is
    reported in the annex only.
 4. **No transfer reason.** `Transfer Type` and `Transfer Reason` exist in the agent-workitem
@@ -64,15 +64,37 @@ We are **not** at 100% scrubbing. Coverage is a designed sample, not an ad-hoc o
     (a transfer that was passed on without being worked).
 - **A stratified random sample of the remaining transfers**, stratified by case type, sized
   for a ±5% margin of error at 95% confidence. For a population of ~700 monthly transfers
-  that is ~250 cases; for a single week (~140 transfers) it is ~103.
+  that is ~250 cases; for a single week (~140 transfers) it is ~103. The draw is
+  deterministic, so it can be reproduced and audited.
 - Each sampled case is marked valid / invalid by a team member against the agreed
   definition, with a free-text reason recorded.
 
 `Invalid rate` is therefore a **sample estimate**, and is reported with its confidence
 interval. It is not directly comparable to a site that scrubs 100%.
 
-## 4. Open question
+## 4. Definition used, in the absence of the agreed one
 
-The template refers to an "agreed definition" of a valid transfer that is not included in
-the template itself. Our marking follows the definition supplied by the requester; until it
-is supplied, the case-level export is produced but the valid/invalid column is left blank.
+The template refers to an "agreed definition" of a valid transfer, but does not contain it,
+and it was not available to us before the deadline. We therefore state the definition we
+applied, so that our figures can be re-cut against the official one later:
+
+> A transfer is **invalid** when the receiving queue was not required to resolve the case —
+> i.e. the ceding channel had the tooling and the entitlement to close it. In practice a
+> transfer is marked invalid when the receiving case was closed with no substantive work
+> (information already available to the ceding agent), when the same contact generated more
+> than one transfer, or when the case was misrouted and moved again.
+
+Every marked case carries a free-text reason, so the case-level file can be re-scored if the
+official definition differs.
+
+## 5. A note on the reported figures
+
+Section 1 and the `Total transfers` row of Section 2 are populated. Rows 17–19
+(`Transfers scrubbed`, `Marked valid`, `Marked invalid`) are completed only once the manual
+marking is done; the invalid rate follows from them.
+
+Two corrections were applied to the template itself and are declared here rather than made
+silently: the section headings said "August 2025" and now say 2026, and cell `D20`
+(`Invalid rate`, **Combined** column) contained `=B19/B16` — the Voice-only rate — and now
+contains `=D19/D16`. Cells `B20`/`C20`, which the original left as manual inputs for values
+derivable from rows already in the sheet, are now formulas.

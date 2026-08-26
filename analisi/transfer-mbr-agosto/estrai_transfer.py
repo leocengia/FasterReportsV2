@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as _dt
+import random
 import re
 import sys
 import zipfile
@@ -161,8 +162,44 @@ def _valore(c: ET.Element, ss: list[str]) -> str | None:
     return v.text
 
 
-def leggi_righe(percorso: Path, nome_foglio: str | None = None):
-    """Restituisce (nome_foglio, intestazioni, righe come dict campo->valore)."""
+def _aggancia(intestazioni: dict, contesto: str) -> dict:
+    """Campo -> chiave di colonna, agganciando per NOME.
+
+    Prima il nome grezzo, poi quello normalizzato: normalizzare per primo puo'
+    far collassare colonne diverse sulla stessa stringa (stessa cautela di
+    core/matcher.py). Le chiavi sono lettere per xlsx, indici per csv: qui non
+    importa quale delle due, importa che non siano mai posizioni fisse.
+    """
+    grezzi = {v.strip(): k for k, v in intestazioni.items()}
+    normalizzati = {norm(v): k for k, v in intestazioni.items()}
+    per_campo: dict = {}
+    for campo, alias in CAMPI.items():
+        for a in alias:
+            if a in grezzi:
+                per_campo[campo] = grezzi[a]
+                break
+            if norm(a) in normalizzati:
+                per_campo[campo] = normalizzati[norm(a)]
+                break
+    mancanti = [c for c in OBBLIGATORIE if c not in per_campo]
+    if mancanti:
+        raise SystemExit(
+            f"{contesto}: mancano le colonne obbligatorie {mancanti}. "
+            f"Trovate {len(intestazioni)} intestazioni. "
+            f"Se l'export ha cambiato nome, aggiungere l'alias in CAMPI."
+        )
+    return per_campo
+
+
+def leggi_workbook(percorso: Path, nome_foglio: str | None = None):
+    """Legge il foglio SF di un workbook. Restituisce (sorgente, intestazioni, per_campo, righe).
+
+    ATTENZIONE: l'Omni Report *generato* dalla pipeline non va bene come sorgente.
+    Scrive solo gli 11 campi dichiarati in config/columns.yml sotto SF_DATABASE e
+    lascia vuote le altre 132 colonne, comprese tutte quelle che servono qui.
+    Il posto giusto da cui leggere e' il CSV `SF DATABASE*.csv` di partenza.
+    Questa funzione resta per i workbook legacy, riempiti incollando il CSV intero.
+    """
     z = zipfile.ZipFile(percorso)
     nome, parte = _trova_foglio(z, nome_foglio)
     ss = _shared_strings(z)
@@ -180,23 +217,7 @@ def leggi_righe(percorso: Path, nome_foglio: str | None = None):
                 nomecol = _valore(c, ss)
                 if nomecol:
                     intestazioni[re.match(r"[A-Z]+", c.get("r")).group(0)] = nomecol
-            grezzi = {v.strip(): k for k, v in intestazioni.items()}
-            normalizzati = {norm(v): k for k, v in intestazioni.items()}
-            for campo, alias in CAMPI.items():
-                for a in alias:
-                    if a in grezzi:
-                        per_campo[campo] = grezzi[a]
-                        break
-                    if norm(a) in normalizzati:
-                        per_campo[campo] = normalizzati[norm(a)]
-                        break
-            mancanti = [c for c in OBBLIGATORIE if c not in per_campo]
-            if mancanti:
-                raise SystemExit(
-                    f"{percorso.name} / foglio '{nome}': mancano le colonne obbligatorie "
-                    f"{mancanti}. Trovate {len(intestazioni)} intestazioni. "
-                    f"Se l'export e' cambiato nome, aggiungere l'alias in CAMPI."
-                )
+            per_campo = _aggancia(intestazioni, f"{percorso.name} / foglio '{nome}'")
             prima = False
             el.clear()
             continue
@@ -208,7 +229,38 @@ def leggi_righe(percorso: Path, nome_foglio: str | None = None):
         if any(v is not None for v in riga.values()):
             righe.append(riga)
         el.clear()
-    return nome, intestazioni, per_campo, righe
+    return f"foglio '{nome}'", intestazioni, per_campo, righe
+
+
+def leggi_csv(percorso: Path):
+    """Legge l'export `SF DATABASE*.csv`. Stessa firma di leggi_workbook().
+
+    L'export e' UTF-8 con BOM: `utf-8-sig` lo toglie, altrimenti la prima
+    intestazione diventa `﻿Date Viewpoint` e non aggancia piu' niente.
+    """
+    with percorso.open(newline="", encoding="utf-8-sig") as fh:
+        lettore = csv.reader(fh)
+        try:
+            testata = next(lettore)
+        except StopIteration:
+            raise SystemExit(f"{percorso.name}: file vuoto")
+        intestazioni = {i: nome for i, nome in enumerate(testata) if nome.strip()}
+        per_campo = _aggancia(intestazioni, percorso.name)
+        righe = []
+        for campi in lettore:
+            riga = {
+                campo: (campi[i].strip() or None) if i < len(campi) else None
+                for campo, i in per_campo.items()
+            }
+            if any(v is not None for v in riga.values()):
+                righe.append(riga)
+    return "csv", intestazioni, per_campo, righe
+
+
+def leggi(percorso: Path, nome_foglio: str | None = None):
+    if percorso.suffix.lower() == ".csv":
+        return leggi_csv(percorso)
+    return leggi_workbook(percorso, nome_foglio)
 
 
 # --------------------------------------------------------------------------
@@ -222,10 +274,21 @@ def _num(v) -> float | None:
         return None
 
 
-def _data(seriale) -> str:
-    n = _num(seriale)
-    if n is None:
+def _data(valore) -> str:
+    """La data arriva in due forme, secondo la sorgente.
+
+    Dal workbook e' un seriale Excel; dal CSV `Date (Range)` e' gia' ISO
+    (`2026-08-22`). Non si prova a indovinare formati ambigui tipo `8/4/2026`:
+    quelli si leggono sia all'americana sia all'europea e qui non servono.
+    """
+    if valore in (None, ""):
         return ""
+    testo = str(valore).strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", testo):
+        return testo
+    n = _num(testo)
+    if n is None:
+        return testo
     # Seriale Excel: 1899-12-30 come giorno zero (il bug bisestile del 1900).
     return (_dt.date(1899, 12, 30) + _dt.timedelta(days=int(n))).isoformat()
 
@@ -272,6 +335,61 @@ def analizza(righe: list[dict]) -> dict:
         "case_transfer": [r for r in righe if r.get("res_category") == "Case Transfer"],
         "call_transfer": [r for r in righe if r.get("res_category") == "Call Transfer"],
     }
+
+
+def dimensiona_campione(n_popolazione: int, margine: float = 0.05) -> int:
+    """Campione per una proporzione, popolazione finita, 95% di confidenza.
+
+    n = N z^2 p q / (d^2 (N-1) + z^2 p q), con p=q=0.5 (il caso peggiore, quello
+    che non richiede di sapere in anticipo quanti invalidi ci sono).
+    """
+    if n_popolazione <= 0:
+        return 0
+    z2pq = 1.96 ** 2 * 0.25
+    n = n_popolazione * z2pq / (margine ** 2 * (n_popolazione - 1) + z2pq)
+    return min(n_popolazione, int(n + 0.999))
+
+
+def marca_campione(transfer: list[dict], seme: str) -> int:
+    """Scrive `_campione` su ogni transfer. Restituisce la dimensione del campione.
+
+    Dentro ci vanno il 100% dei casi ad alto rischio piu' un casuale stratificato
+    per case type sul resto. L'estrazione e' deterministica a parita' di seme:
+    rilanciare lo script due volte deve dare lo stesso campione, altrimenti lo
+    scrub gia' fatto non si riaggancia piu'.
+    """
+    for r in transfer:
+        r["_campione"] = r["_rischio"] > 0
+
+    bersaglio = dimensiona_campione(len(transfer))
+    resto = [r for r in transfer if not r["_campione"]]
+    mancano = bersaglio - (len(transfer) - len(resto))
+    if mancano <= 0 or not resto:
+        return sum(1 for r in transfer if r["_campione"])
+
+    strati: dict[str, list[dict]] = defaultdict(list)
+    for r in resto:
+        strati[r.get("case_type") or "(vuoto)"].append(r)
+
+    rng = random.Random(seme)
+    quote: list[tuple[str, int]] = []
+    for ct, rr in sorted(strati.items()):
+        quote.append((ct, min(len(rr), round(mancano * len(rr) / len(resto)))))
+    # L'arrotondamento per strato non torna mai esatto: si aggiusta pescando
+    # (o restituendo) negli strati piu' capienti, in ordine deterministico.
+    scelti: list[dict] = []
+    for ct, q in quote:
+        rr = sorted(strati[ct], key=lambda r: r.get("case_number") or "")
+        rng.shuffle(rr)
+        scelti.extend(rr[:q])
+    residuo = [r for r in resto if r not in scelti]
+    residuo.sort(key=lambda r: r.get("case_number") or "")
+    rng.shuffle(residuo)
+    while len(scelti) < mancano and residuo:
+        scelti.append(residuo.pop())
+    for r in scelti[:mancano]:
+        r["_campione"] = True
+    return sum(1 for r in transfer if r["_campione"])
 
 
 def rendi_breakdown(a: dict, etichetta: str) -> str:
@@ -325,6 +443,17 @@ def rendi_breakdown(a: dict, etichetta: str) -> str:
     if a["soglia_aht"] is not None:
         out.append(f"- soglia `aht_basso` (10° percentile dei transfer): {a['soglia_aht']:.2f} min")
     out.append(f"- casi padre con piu' di un transfer figlio (bounce): {a['padri_multipli']}")
+    n_camp = sum(1 for r in tr if r.get("_campione"))
+    if n_camp:
+        out.append(f"- **campione da marcare a mano: {n_camp}** su {len(tr)} "
+                   f"({100 * n_camp / len(tr):.0f}%) — alto rischio al 100% piu' un "
+                   f"casuale stratificato per case type, per ±5% al 95%")
+        restanti = len(tr) - n_camp
+        if 0 < restanti <= max(40, len(tr) // 4):
+            out.append(f"- NOTA: mancano solo **{restanti}** casi al 100% di copertura. "
+                       f"A questi volumi conviene scrubbare tutto: la mail cita Legazpi "
+                       f"proprio come esempio di sito al 100%, e un campione va spiegato "
+                       f"mentre il 100% no.")
     out.append("")
     out.append("## Controllo per case type")
     out.append("")
@@ -344,14 +473,17 @@ COLONNE_CSV = [
     "case_number", "data", "canale_provenienza", "destinazione", "work_function",
     "omni_level", "case_type", "record_type", "primary_category", "secondary_category",
     "employee", "manager", "aht_min", "misrouted", "has_child", "parentid",
-    "queue", "flag_rischio", "punteggio_rischio", "valid_invalid", "note_scrub",
+    "queue", "flag_rischio", "punteggio_rischio", "nel_campione", "valid_invalid", "note_scrub",
 ]
 
 
 def scrivi_csv(transfer: list[dict], percorso: Path) -> None:
+    # Prima chi va marcato, poi per rischio decrescente: chi compila lavora
+    # dall'alto e si ferma quando finisce il campione.
     ordinati = sorted(
         transfer,
-        key=lambda r: (-r["_rischio"], r.get("case_type") or "", r.get("case_number") or ""),
+        key=lambda r: (not r.get("_campione"), -r["_rischio"],
+                       r.get("case_type") or "", r.get("case_number") or ""),
     )
     with percorso.open("w", newline="", encoding="utf-8-sig") as fh:
         w = csv.writer(fh, delimiter=";")
@@ -378,6 +510,7 @@ def scrivi_csv(transfer: list[dict], percorso: Path) -> None:
                 r.get("queue") or "",
                 r["_flag"],
                 r["_rischio"],
+                "SI" if r.get("_campione") else "",
                 "", "",
             ])
 
@@ -394,10 +527,20 @@ def main(argv: list[str] | None = None) -> int:
     for wb in args.workbook:
         if not wb.exists():
             raise SystemExit(f"file non trovato: {wb}")
-        foglio, intestazioni, per_campo, righe = leggi_righe(wb, args.sheet)
+        sorgente, intestazioni, per_campo, righe = leggi(wb, args.sheet)
         assenti = [c for c in CAMPI if c not in per_campo]
-        print(f"[{wb.name}] foglio '{foglio}': {len(intestazioni)} colonne, {len(righe)} righe"
+        print(f"[{wb.name}] {sorgente}: {len(intestazioni)} colonne, {len(righe)} righe"
               f"{'  · campi non trovati: ' + ', '.join(assenti) if assenti else ''}", file=sys.stderr)
+        # Un workbook generato dalla pipeline ha le intestazioni ma non i dati:
+        # meglio dirlo qui che far uscire un report di zeri.
+        vuoti = [c for c in ("case_origin", "work_function", "channel_group")
+                 if not any(r.get(c) for r in righe)]
+        if vuoti:
+            raise SystemExit(
+                f"{wb.name}: le colonne {vuoti} esistono ma sono TUTTE vuote. "
+                f"Se e' un Omni Report generato dalla pipeline e' normale: scrive solo gli "
+                f"11 campi del contratto. Usare l'export 'SF DATABASE*.csv' di partenza."
+            )
         tutte.extend(righe)
 
     # Sommando piu' settimane un caso puo' comparire due volte (export che si
@@ -420,6 +563,9 @@ def main(argv: list[str] | None = None) -> int:
 
     a = analizza(tutte)
     etichetta = args.etichetta or "+".join(w.stem for w in args.workbook)
+    # Il seme e' l'etichetta: stesso periodo -> stesso campione a ogni rilancio,
+    # cosi' lo scrub gia' fatto si riaggancia.
+    marca_campione(a["transfer"], etichetta)
     md = rendi_breakdown(a, etichetta)
     print(md)
 

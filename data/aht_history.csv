@@ -598,3 +598,58 @@ week,channel,case_type,volume,aht,iso_year,week_key
 33,Phone,Specialty Functions,5,9.84,2026,202633
 33,Phone,Supplier Initiated Relocation,102,15.01176470588235,2026,202633
 33,Phone,Supplier Initiated Traveler Contact,828,10.442475728155335,2026,202633
+35,Non-live,Account Takeover,7,29.571428571428573,2026,202635
+35,Non-live,Booking Information,20,22.846153846153847,2026,202635
+35,Non-live,Connectivity Questions,1,5.4,2026,202635
+35,Non-live,Contact Update,4,0.0,2026,202635
+35,Non-live,Content Update,7,22.2,2026,202635
+35,Non-live,Core OTA Account Review,1,0.0,2026,202635
+35,Non-live,Core OTA Supplier Review,1,0.0,2026,202635
+35,Non-live,EVC,13,6.2666666666666675,2026,202635
+35,Non-live,Expedia Collect Invoice,11,4.2,2026,202635
+35,Non-live,Hotel Closure Outreach,8,10.35,2026,202635
+35,Non-live,Hotel Collect Issue,7,15.960000000000003,2026,202635
+35,Non-live,Known Tool Outage Issue,2,7.5,2026,202635
+35,Non-live,Live Site Investigation,1,11.4,2026,202635
+35,Non-live,New Contract,2,2.6999999999999997,2026,202635
+35,Non-live,Partner Central Access,23,16.050000000000004,2026,202635
+35,Non-live,Pre-Onboarding,1,16.8,2026,202635
+35,Non-live,Promotion,13,1.6285714285714286,2026,202635
+35,Non-live,Property Classification,1,9.0,2026,202635
+35,Non-live,Property Details,2,3.0,2026,202635
+35,Non-live,Property Settings,14,14.800000000000002,2026,202635
+35,Non-live,Rates & Inventory Changes,5,2.1,2026,202635
+35,Non-live,Refund Request,4,12.0,2026,202635
+35,Non-live,Room Type/Rate Plan,13,23.88,2026,202635
+35,Non-live,Supplier Initiated Relocation,12,12.059999999999999,2026,202635
+35,Non-live,Supplier Initiated Traveler Contact,654,9.262012987012982,2026,202635
+35,Phone,Booking Information,192,17.018750000000004,2026,202635
+35,Phone,Bulk Update Request,2,12.899999999999999,2026,202635
+35,Phone,Call Assignment,40,3.825,2026,202635
+35,Phone,Connectivity Questions,3,72.39999999999999,2026,202635
+35,Phone,Contact Update,2,15.6,2026,202635
+35,Phone,Content Update,28,15.964285714285714,2026,202635
+35,Phone,Contract Loading,1,4.8,2026,202635
+35,Phone,Contract Questions,3,20.6,2026,202635
+35,Phone,Customer Review Removal,9,19.46666666666667,2026,202635
+35,Phone,EVC,160,17.984999999999992,2026,202635
+35,Phone,Expedia Collect Invoice,144,15.708333333333336,2026,202635
+35,Phone,Hotel Closure Outreach,1,18.0,2026,202635
+35,Phone,Hotel Collect Issue,119,12.988235294117654,2026,202635
+35,Phone,Inventory Closeout,1,15.0,2026,202635
+35,Phone,Known Tool Outage Issue,1,85.2,2026,202635
+35,Phone,Live Site Investigation,11,29.781818181818185,2026,202635
+35,Phone,New Contract,12,17.599999999999998,2026,202635
+35,Phone,Partner Central Access,27,29.266666666666676,2026,202635
+35,Phone,Partner Tool Issue,1,43.2,2026,202635
+35,Phone,Payout Review,2,11.399999999999999,2026,202635
+35,Phone,Pre-Onboarding,8,20.475,2026,202635
+35,Phone,Promotion,39,13.046153846153844,2026,202635
+35,Phone,Property Settings,99,14.012121212121208,2026,202635
+35,Phone,Rates & Inventory Changes,63,26.51428571428572,2026,202635
+35,Phone,Refund Request,40,13.889999999999995,2026,202635
+35,Phone,Room Type/Rate Plan,31,22.200000000000006,2026,202635
+35,Phone,Special Check-In Instructions,1,66.6,2026,202635
+35,Phone,Specialty Functions,4,8.100000000000001,2026,202635
+35,Phone,Supplier Initiated Relocation,93,14.354838709677413,2026,202635
+35,Phone,Supplier Initiated Traveler Contact,887,10.774295377677563,2026,202635
